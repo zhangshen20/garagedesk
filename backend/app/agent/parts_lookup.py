@@ -42,8 +42,11 @@ def lookup_part_price(s: Session, query: str, vehicle: str = "") -> dict[str, An
 
 def _local_matches(s: Session, query: str) -> list[Part]:
     words = [w for w in query.lower().split() if len(w) > 2]
+    # Need most of the query to match, so "brake pads toyota" doesn't pull in
+    # every Toyota part on the shelf.
+    need = max(1, (len(words) + 1) // 2)
     parts = s.exec(select(Part)).all()
-    return [p for p in parts if any(w in p.name.lower() for w in words)]
+    return [p for p in parts if sum(w in p.name.lower() for w in words) >= need]
 
 
 def _web_search(q: str) -> list[dict[str, Any]]:

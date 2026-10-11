@@ -27,8 +27,13 @@ if os.path.exists("live-smoke.db"):
     os.remove("live-smoke.db")
 
 
+_last = [time.time()]
+
+
 def show(label: str, r: dict) -> None:
-    print(f"\n=== {label} [{r.get('model')}]")
+    now = time.time()
+    print(f"\n=== {label} [{r.get('model')}] {now - _last[0]:.1f}s")
+    _last[0] = now
     for s in r.get("steps", []):
         print(f"  -> {s['tool']}({json.dumps(s['args'])[:120]})")
     print("  reply:", (r.get("reply") or "")[:400])
@@ -36,7 +41,7 @@ def show(label: str, r: dict) -> None:
 
 with TestClient(app) as c:
     print("LLM mode:", c.get("/healthz").json())
-    t = time.time()
+    t = _last[0] = time.time()
     show("web booking", c.post("/api/chat/customer", json={"text": "Hi, Ben Hall here. My Toyota Camry, rego BHX442, is due for a logbook service. Got anything tomorrow morning? My number is 0412 345 678.", "session_id": "web-live-1"}).json())
     show("web booking follow-up", c.post("/api/chat/customer", json={"text": "9 is good, book it", "session_id": "web-live-1"}).json())
     show("sms status", c.post("/api/chat/customer", json={"text": "hey is my corolla ready? rego ABC123", "session_id": "+61411000001", "channel": "sms"}).json())
@@ -45,7 +50,8 @@ with TestClient(app) as c:
     show("owner: order parts", c.post("/api/chat/owner", json={"text": "order front brake pads for the corolla on job 3 from whoever is cheapest"}).json())
     show("owner: invoice", c.post("/api/chat/owner", json={"text": "job 4 is finished, invoice it"}).json())
     show("owner: expense", c.post("/api/chat/owner", json={"text": "add an expense, $64 brake cleaner from burson, consumables"}).json())
+    t0 = time.time()
     rep = c.post("/api/reports/generate").json()
-    print(f"\n=== daily report [{rep['model']}]\n{rep['content_md']}")
+    print(f"\n=== daily report [{rep['model']}] {time.time() - t0:.1f}s\n{rep['content_md']}")
     print(f"\nTotal time {time.time() - t:.1f}s")
     print("\nApprovals:", json.dumps(c.get("/api/approvals").json(), indent=1)[:600])

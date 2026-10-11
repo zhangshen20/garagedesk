@@ -41,6 +41,15 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[] = [], intervalM
   return { data, loading, error, refresh };
 }
 
+/** Re-run `refresh` whenever the desk assistant (or any panel) reports a data change. */
+export function useRefreshOnChange(refresh: () => Promise<void> | void) {
+  useEffect(() => {
+    const h = () => void refresh();
+    window.addEventListener("garagedesk:changed", h);
+    return () => window.removeEventListener("garagedesk:changed", h);
+  }, [refresh]);
+}
+
 /** Small toast queue. */
 export interface Toast {
   id: number;

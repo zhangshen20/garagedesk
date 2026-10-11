@@ -94,7 +94,8 @@ def seed(s: Session) -> None:
     s.flush()
     inv1 = svc.issue_invoice(s, j1)
     inv1.issued_at = datetime.utcnow() - timedelta(days=1)
-    svc.record_payment(s, inv1, inv1.total_cents, "card", "EFT-7781")
+    pay1 = svc.record_payment(s, inv1, inv1.total_cents, "card", "EFT-7781")
+    pay1.paid_at = datetime.utcnow() - timedelta(days=1)
 
     b2 = book("TB1234", -3, "09:00", "Brake pads and rotors", BookingStatus.completed)
     j2 = Job(booking_id=b2.id, customer_id=customers["TB1234"].id, vehicle_id=vehicles["TB1234"].id, title="Brake pads and rotors", status=JobStatus.done)

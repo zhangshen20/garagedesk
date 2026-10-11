@@ -1,0 +1,27 @@
+name: Deploy
+
+# Redeploys the demo VM after CI passes on main. Needs repository secrets:
+#   DEPLOY_HOST (public IP or DNS), DEPLOY_USER, DEPLOY_SSH_KEY (private key for that user).
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  redeploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip when no deploy target is configured
+        id: cfg
+        run: echo "ok=${{ secrets.DEPLOY_HOST != '' }}" >> "$GITHUB_OUTPUT"
+      - name: Redeploy over SSH
+        if: steps.cfg.outputs.ok == 'true'
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: sudo bash /opt/garagedesk/src/deploy/nebius/redeploy.sh

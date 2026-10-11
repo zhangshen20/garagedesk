@@ -1,0 +1,28 @@
+# Fly.io config (alternative host). Models still run on Nebius Token Factory.
+#   fly launch --copy-config --no-deploy && fly volumes create garagedesk_data --size 1
+#   fly secrets set NEBIUS_API_KEY=... TAVILY_API_KEY=... && fly deploy
+app = "garagedesk"
+primary_region = "syd"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8000"
+  DATABASE_URL = "sqlite:////data/garagedesk.db"
+  FILES_DIR = "/data/files"
+
+[[mounts]]
+  source = "garagedesk_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

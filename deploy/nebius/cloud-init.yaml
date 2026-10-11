@@ -1,0 +1,41 @@
+#cloud-config
+# Nebius AI Cloud VM bootstrap: installs Docker, pulls the repo, runs GarageDesk on :80
+# with Caddy in front for automatic HTTPS when a DNS name is set.
+#
+#   nebius compute instance create --name garagedesk ... --cloud-init-user-data "$(cat cloud-init.yaml)"
+#
+# Set the two secrets below before use (or inject them via your own secret store).
+package_update: true
+packages: [docker.io, docker-compose-v2, git]
+write_files:
+  - path: /opt/garagedesk/.env
+    permissions: "0600"
+    content: |
+      NEBIUS_API_KEY=REPLACE_ME
+      TAVILY_API_KEY=
+      PUBLIC_BASE_URL=http://REPLACE_WITH_PUBLIC_IP
+  - path: /opt/garagedesk/Caddyfile
+    content: |
+      :80 {
+        reverse_proxy garagedesk:8000
+      }
+  - path: /opt/garagedesk/docker-compose.override.yml
+    content: |
+      services:
+        garagedesk:
+          ports: []
+        caddy:
+          image: caddy:2
+          ports: ["80:80", "443:443"]
+          volumes:
+            - ./Caddyfile:/etc/caddy/Caddyfile
+            - caddy-data:/data
+          restart: unless-stopped
+      volumes:
+        caddy-data:
+runcmd:
+  - systemctl enable --now docker
+  - git clone https://github.com/zhangshen20/garagedesk /opt/garagedesk/src
+  - cp /opt/garagedesk/.env /opt/garagedesk/src/.env
+  - cp /opt/garagedesk/Caddyfile /opt/garagedesk/docker-compose.override.yml /opt/garagedesk/src/
+  - cd /opt/garagedesk/src && docker compose up -d --build

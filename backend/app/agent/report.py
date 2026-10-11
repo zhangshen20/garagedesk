@@ -5,6 +5,7 @@ it has to reason across cash, jobs, parts and tomorrow's board in one pass."""
 from __future__ import annotations
 
 import json
+import re
 from datetime import date
 
 from sqlmodel import Session, select
@@ -64,5 +65,6 @@ def generate_daily_report(s: Session, d: date | None = None, force: bool = False
     from ..models import Channel
 
     first = next((ln for ln in content.splitlines() if ln and not ln.startswith("#")), "Report ready.")
+    first = re.sub(r"[*_`]+", "", first).replace("  ·  ", "; ")
     send(s, Channel.sms, get_settings().owner_phone, f"{get_settings().shop_name} end of day: {first[:200]} Full report on your dashboard.")
     return rep

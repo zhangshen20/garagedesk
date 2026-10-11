@@ -201,11 +201,20 @@ class MockLLM:
                 bl = results.get("list_bookings", {}).get("bookings", [])
                 lines = [f"- {b['start']} bay {b['bay']}: {b['customer']} ({b['vehicle']}) {b['service']}" for b in bl]
                 return say("Today's board:\n" + ("\n".join(lines) if lines else "No bookings."))
-            if ("owed" in text or "outstanding" in text or "unpaid" in text) and "list_unpaid_invoices" in tool_names:
+            if ("owe" in text or "outstanding" in text or "unpaid" in text) and "list_unpaid_invoices" in tool_names:
                 if "list_unpaid_invoices" not in done:
                     return call("list_unpaid_invoices")
                 u = results.get("list_unpaid_invoices", {})
                 return say(f"${u.get('total_cents', 0) / 100:.2f} outstanding across {len(u.get('invoices', []))} invoices.")
+            if "expense" in text and "add_expense" in tool_names:
+                if "add_expense" not in done:
+                    m = re.search(r"\$\s*(\d+(?:\.\d{1,2})?)", text)
+                    cents = int(round(float(m.group(1)) * 100)) if m else 0
+                    desc = re.sub(r"^.*?expense[:,]?\s*", "", text).strip() or "expense"
+                    desc = re.sub(r"\$\s*\d+(?:\.\d{1,2})?\s*", "", desc).strip(" ,.") or "expense"
+                    return call("add_expense", description=desc, amount_cents=cents, category="consumables")
+                e = results.get("add_expense", {})
+                return say(f"Logged that expense (#{e.get('expense_id')}), GST portion ${e.get('gst_cents', 0) / 100:.2f}.")
             return say("Done. Anything else you want cleared off the desk?")
 
         # ---- customer front desk -------------------------------------------------------
@@ -268,7 +277,7 @@ def _mock_report(messages: list[dict[str, Any]]) -> str:
         f"**Cash in:** ${d.get('cash_in_cents', 0) / 100:,.2f}  ·  **Cash out:** ${d.get('cash_out_cents', 0) / 100:,.2f}  ·  "
         f"**Jobs completed:** {d.get('jobs_completed', 0)}\n\n"
         "### What needs you\n"
-        + "\n".join(f"- {a}" for a in d.get("pending_approvals", [])) + "\n\n"
+        + ("\n".join(f"- {a}" for a in d.get("pending_approvals", [])) or "Nothing waiting on you.") + "\n\n"
         "### Tomorrow\n"
         f"{d.get('bookings_tomorrow', 0)} cars booked. First drop-off 8:00am.\n\n"
         "*(mock report: set NEBIUS_API_KEY to have Nemotron 3 Ultra write this)*"

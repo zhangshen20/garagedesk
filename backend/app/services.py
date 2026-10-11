@@ -153,11 +153,13 @@ def availability(s: Session, from_day: date, days: int = 3) -> list[dict[str, An
 
 
 def first_free_bay(s: Session, d: date, t: time) -> int | None:
-    taken = {b.bay for b in s.exec(select(Booking).where(Booking.day == d, Booking.start == t, Booking.status.in_([BookingStatus.requested, BookingStatus.confirmed, BookingStatus.checked_in]))).all()}  # type: ignore[attr-defined]
-    for bay in range(1, get_settings().bays + 1):
-        if bay not in taken:
-            return bay
-    return None
+    """Free bay at that time; prefer the bay with the fewest cars that day so the board stays balanced."""
+    active = [BookingStatus.requested, BookingStatus.confirmed, BookingStatus.checked_in]
+    days_bookings = s.exec(select(Booking).where(Booking.day == d, Booking.status.in_(active))).all()  # type: ignore[attr-defined]
+    taken_now = {b.bay for b in days_bookings if b.start == t}
+    load = {bay: sum(1 for b in days_bookings if b.bay == bay) for bay in range(1, get_settings().bays + 1)}
+    free = [bay for bay in load if bay not in taken_now]
+    return min(free, key=lambda bay: (load[bay], bay)) if free else None
 
 
 def create_booking(s: Session, *, customer: Customer, vehicle: Vehicle | None, day: date, start: time, service: str, source: str = "desk", notes: str | None = None) -> Booking:

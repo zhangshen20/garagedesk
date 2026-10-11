@@ -49,7 +49,7 @@ def generate_daily_report(s: Session, d: date | None = None, force: bool = False
         ],
         tier="deep",
         temperature=0.3,
-        max_tokens=900,
+        max_tokens=3000,  # Ultra reasons first (~1.2k tokens) before writing
     )
     content = reply.content or "No report generated."
     if existing:

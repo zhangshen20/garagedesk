@@ -31,7 +31,9 @@ A deterministic mock drives the same tools so tests, CI and a keyless demo exerc
 A complete product, not a demo: bookings, bays, job cards, GST invoices with PDFs, payments and receipts, purchase orders, approvals, outbox, daily report, reminders, and a dashboard the owner would actually use.
 
 ## What we learned
-(filled in after live testing: latency and tool-calling reliability per Nemotron tier, cost per customer interaction)
+Splitting the work across three Nemotron tiers paid off. Nano with thinking turned off classifies a message in under half a second, Super drives each agent turn in 2-5 seconds including its tool calls, and Ultra writes the whole end-of-day report in about 5 seconds. In live testing every tool chain (find customer, availability, book; price lookup, parts order, owner approval; job done, GST invoice) completed first time with clean arguments.
+
+The surprise was reasoning tokens. They count against `max_tokens`, so our first live run returned truncated JSON from Nano and a daily report from Ultra that stopped mid-sentence. Turning thinking off for the one-shot Nano jobs and giving Ultra room to think fixed both. That lesson now shapes how we budget every call: small models answer directly, and the big model gets space to reason.
 
 ## What's next
 Xero/MYOB sync for the bookkeeper, real Twilio number for Sunshine Auto Care, photo-to-expense from the parts counter, and a second shop.

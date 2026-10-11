@@ -88,6 +88,10 @@ class NebiusLLM:
             kwargs["tool_choice"] = "auto"
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
+        if tier == "fast":
+            # Nano's hidden reasoning otherwise eats the token budget on one-shot
+            # extraction jobs and returns an empty or truncated answer.
+            kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
         resp = self.client.chat.completions.create(**kwargs)
         choice = resp.choices[0].message
         calls: list[ToolCall] = []

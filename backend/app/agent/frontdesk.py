@@ -29,7 +29,7 @@ CLASSIFY_PROMPT = (
 
 def classify(text: str) -> dict[str, Any]:
     try:
-        r = get_llm().chat([{"role": "system", "content": CLASSIFY_PROMPT}, {"role": "user", "content": text}], tier="fast", json_mode=True, max_tokens=60)
+        r = get_llm().chat([{"role": "system", "content": CLASSIFY_PROMPT}, {"role": "user", "content": text}], tier="fast", json_mode=True, max_tokens=120)
         d = json.loads(r.content or "{}")
         return {"intent": d.get("intent", "other"), "urgency": d.get("urgency", "normal")}
     except Exception as e:  # noqa: BLE001

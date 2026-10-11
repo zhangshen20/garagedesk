@@ -1,0 +1,16 @@
+services:
+  garagedesk:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: sqlite:////data/garagedesk.db
+      FILES_DIR: /data/files
+    volumes:
+      - garagedesk-data:/data
+    restart: unless-stopped
+
+volumes:
+  garagedesk-data:

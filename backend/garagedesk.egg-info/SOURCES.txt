@@ -1,0 +1,6 @@
+pyproject.toml
+garagedesk.egg-info/PKG-INFO
+garagedesk.egg-info/SOURCES.txt
+garagedesk.egg-info/dependency_links.txt
+garagedesk.egg-info/requires.txt
+garagedesk.egg-info/top_level.txt

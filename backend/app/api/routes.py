@@ -29,7 +29,9 @@ from ..models import (
     DailyReport,
     EventLog,
     Invoice,
+    InvoiceStatus,
     Job,
+    JobLine,
     JobStatus,
     Message,
     Outbox,
@@ -68,6 +70,131 @@ def chat_owner(body: OwnerChatIn, s: Session = Depends(get_session)) -> dict[str
     r = handle_owner_message(s, body.text)
     s.commit()
     return {"reply": r.reply, "steps": r.steps, "model": r.model}
+
+
+# --- owner app: speak, snap, tap ------------------------------------------------------
+
+
+class VoiceIn(BaseModel):
+    text: str
+
+
+@router.post("/owner/voice")
+def owner_voice(body: VoiceIn, s: Session = Depends(get_session)) -> dict[str, Any]:
+    from ..agent.owner_app import handle_voice
+
+    if not body.text.strip():
+        raise HTTPException(400, "nothing heard")
+    r = handle_voice(s, body.text.strip())
+    s.commit()
+    return r
+
+
+class PhotoIn(BaseModel):
+    image_b64: str
+    mime: str = "image/jpeg"
+
+
+@router.post("/owner/photo")
+def owner_photo(body: PhotoIn, s: Session = Depends(get_session)) -> dict[str, Any]:
+    from ..agent.jobcard import draft_from_text, transcribe_photo
+
+    b64 = body.image_b64.split(",", 1)[-1]  # accept a data: URL too
+    if len(b64) > 12_000_000:
+        raise HTTPException(413, "photo too large")
+    text, vmodel = transcribe_photo(b64, body.mime)
+    if not text:
+        return {"kind": "draft", "ok": False, "readback": "I couldn't read that photo. Try again with the whole card in view.", "transcript": ""}
+    r = draft_from_text(s, text, transcript_model=vmodel)
+    s.commit()
+    return {"kind": "draft", **r.as_dict()}
+
+
+def _owner_job_view(s: Session, j: Job) -> dict[str, Any]:
+    v = svc.job_view(s, j)
+    a = s.exec(select(Approval).where(Approval.kind == "invoice", Approval.ref_id == j.id).order_by(Approval.id.desc())).first()  # type: ignore[attr-defined]
+    v["approval"] = {"id": a.id, "status": a.status.value} if a else None
+    return v
+
+
+@router.get("/owner/today")
+def owner_today(s: Session = Depends(get_session)) -> dict[str, Any]:
+    settings = get_settings()
+    open_statuses = [JobStatus.in_progress, JobStatus.waiting_parts, JobStatus.done, JobStatus.approved, JobStatus.invoiced]
+    jobs = s.exec(select(Job).where(Job.status.in_(open_statuses)).order_by(Job.updated_at.desc())).all()  # type: ignore[attr-defined]
+    today = svc.today()
+    waiting = s.exec(select(Booking).where(Booking.day == today, Booking.status.in_([BookingStatus.confirmed, BookingStatus.requested])).order_by(Booking.start)).all()  # type: ignore[attr-defined]
+    return {
+        "shop": settings.shop_trading_name,
+        "owner": settings.owner_name,
+        "approver": settings.approver_name,
+        "jobs": [_owner_job_view(s, j) for j in jobs],
+        "arriving": [svc.booking_view(s, b) for b in waiting if not s.exec(select(Job).where(Job.booking_id == b.id)).first()],
+    }
+
+
+@router.post("/owner/jobs/{job_id}/send")
+def owner_send(job_id: int, s: Session = Depends(get_session)) -> dict[str, Any]:
+    j = s.get(Job, job_id)
+    if not j:
+        raise HTTPException(404)
+    if not s.exec(select(JobLine).where(JobLine.job_id == j.id)).first():
+        raise HTTPException(400, "job card is empty")
+    r = svc.request_invoice_approval(s, j)
+    s.commit()
+    return r
+
+
+class PaidIn(BaseModel):
+    method: str = "eftpos"
+
+
+@router.post("/owner/jobs/{job_id}/paid")
+def owner_paid(job_id: int, body: PaidIn, s: Session = Depends(get_session)) -> dict[str, Any]:
+    inv = s.exec(select(Invoice).where(Invoice.job_id == job_id, Invoice.status == InvoiceStatus.issued)).first()
+    if not inv:
+        raise HTTPException(404, "no unpaid invoice for that job")
+    svc.record_payment(s, inv, inv.total_cents, body.method)
+    s.commit()
+    return {"number": inv.number, "status": inv.status.value, "method": body.method}
+
+
+# --- approve page for whoever does the books (link texted to her phone) -----------------
+
+
+def _checked_approval(s: Session, approval_id: int, t: str) -> Approval:
+    import hmac as _hmac
+
+    a = s.get(Approval, approval_id)
+    if not a or not _hmac.compare_digest(svc.approval_token(a), t or ""):
+        raise HTTPException(404)
+    return a
+
+
+@router.get("/approve/{approval_id}")
+def approve_view(approval_id: int, t: str = "", s: Session = Depends(get_session)) -> dict[str, Any]:
+    a = _checked_approval(s, approval_id, t)
+    out: dict[str, Any] = {**_approval_view(a), "approver": get_settings().approver_name, "shop": get_settings().shop_trading_name}
+    if a.kind == "invoice" and a.ref_id:
+        j = s.get(Job, a.ref_id)
+        out["job"] = svc.job_view(s, j) if j else None
+    return out
+
+
+class ApproveIn(BaseModel):
+    t: str
+    approve: bool
+    note: str | None = None
+
+
+@router.post("/approve/{approval_id}")
+def approve_decide(approval_id: int, body: ApproveIn, s: Session = Depends(get_session)) -> dict[str, Any]:
+    a = _checked_approval(s, approval_id, body.t)
+    if a.status != ApprovalStatus.pending:
+        return _approval_view(a)
+    r = svc.decide_approval(s, a, body.approve, note=body.note, actor="approver")
+    s.commit()
+    return {**_approval_view(a), **r}
 
 
 # --- overview -------------------------------------------------------------------------

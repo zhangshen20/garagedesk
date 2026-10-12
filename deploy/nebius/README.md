@@ -28,7 +28,16 @@ Add repository secrets `DEPLOY_HOST`, `DEPLOY_USER` (`ubuntu`), `DEPLOY_SSH_KEY`
 
 ## HTTPS
 
-Point a DNS name at the IP, change the Caddyfile's `:80` to that name, and `docker compose up -d`; Caddy fetches a certificate automatically.
+The owner app needs HTTPS: iPhone Safari only allows speech recognition on a secure page. With no domain, use the free sslip.io name for the IP (`66.201.4.40` becomes `66-201-4-40.sslip.io`). Add a site block for it to the VM's Caddyfile next to `:80`, set `PUBLIC_BASE_URL=https://66-201-4-40.sslip.io` in `.env` so texted links use it, and `docker compose up -d`; Caddy fetches a Let's Encrypt certificate automatically.
+
+```
+66-201-4-40.sslip.io {
+  reverse_proxy garagedesk:8000
+}
+:80 {
+  reverse_proxy garagedesk:8000
+}
+```
 
 ## Notes
 

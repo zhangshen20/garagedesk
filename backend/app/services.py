@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 from datetime import date, datetime, time, timedelta
 from typing import Any
@@ -251,6 +253,61 @@ def issue_invoice(s: Session, job: Job) -> Invoice:
     return inv
 
 
+def invoice_link(inv: Invoice) -> str:
+    return f"{get_settings().public_base_url}/api/invoices/{inv.number}/pdf"
+
+
+def issue_and_send_invoice(s: Session, job: Job) -> Invoice:
+    """Issue the tax invoice and text it to the customer with "your car is ready"."""
+    already = s.exec(select(Invoice).where(Invoice.job_id == job.id, Invoice.status != InvoiceStatus.void)).first()
+    inv = issue_invoice(s, job)
+    if already:
+        return inv
+    c = s.get(Customer, job.customer_id)
+    v = s.get(Vehicle, job.vehicle_id) if job.vehicle_id else None
+    from .channels.transport import send
+
+    car = f"{v.make} {v.model}" if v else job.title
+    first = c.name.split()[0] if c else ""
+    send(s, Channel.sms, c.phone if c else "", f"Hi {first}, your {car} is ready to collect. Tax invoice {inv.number} for ${inv.total_cents / 100:.2f} inc GST: {invoice_link(inv)} - {get_settings().shop_trading_name}")
+    return inv
+
+
+def request_invoice_approval(s: Session, job: Job) -> dict[str, Any]:
+    """The owner said "send". The person who does the books gets a one-tap approval on
+    her phone; small invoices can go straight out once she trusts it."""
+    settings = get_settings()
+    view = job_view(s, job)
+    if job.status in (JobStatus.invoiced, JobStatus.paid):
+        return {"status": "already_invoiced", "invoice_number": view["invoice_number"]}
+    if settings.auto_approve_invoice_under_cents and view["total_cents"] < settings.auto_approve_invoice_under_cents:
+        inv = issue_and_send_invoice(s, job)
+        return {"status": "sent", "invoice_number": inv.number, "total_cents": inv.total_cents}
+    pending = s.exec(select(Approval).where(Approval.kind == "invoice", Approval.ref_id == job.id, Approval.status == ApprovalStatus.pending)).first()
+    if pending:
+        pending.detail = _invoice_approval_detail(view)
+        a = pending
+    else:
+        a = request_approval(s, kind="invoice", title=f"Invoice for {view['customer']} ({' '.join(view['vehicle'].split()[:2])})", detail=_invoice_approval_detail(view), ref_table="job", ref_id=job.id)
+    from .channels.transport import send
+
+    send(s, Channel.sms, settings.approver_phone, f"{settings.owner_name} finished {view['customer']}'s {' '.join(view['vehicle'].split()[:2])}. Invoice ${view['total_cents'] / 100:.2f} inc GST is ready. Check and approve: {approval_link(a)}")
+    return {"status": "awaiting_approval", "approval_id": a.id, "approver": settings.approver_name, "total_cents": view["total_cents"]}
+
+
+def _invoice_approval_detail(view: dict[str, Any]) -> str:
+    items = "; ".join(f"{l['description']} x{l['qty']:g}" for l in view["lines"])
+    return f"{items}. Total ${view['total_cents'] / 100:.2f} inc GST (GST ${view['gst_cents'] / 100:.2f})."
+
+
+def approval_token(a: Approval) -> str:
+    return hmac.new(get_settings().app_secret.encode(), f"approval:{a.id}".encode(), hashlib.sha256).hexdigest()[:20]
+
+
+def approval_link(a: Approval) -> str:
+    return f"{get_settings().public_base_url}/approve/{a.id}?t={approval_token(a)}"
+
+
 def record_payment(s: Session, inv: Invoice, amount_cents: int, method: str = "card", reference: str | None = None) -> Payment:
     p = Payment(invoice_id=inv.id, amount_cents=amount_cents, method=method, reference=reference)
     s.add(p)
@@ -264,6 +321,11 @@ def record_payment(s: Session, inv: Invoice, amount_cents: int, method: str = "c
         from .invoices import render_receipt_pdf
 
         inv.receipt_pdf_path = render_receipt_pdf(s, inv)
+        c = s.get(Customer, inv.customer_id)
+        if c:
+            from .channels.transport import send
+
+            send(s, Channel.sms, c.phone, f"Thanks {c.name.split()[0]}, paid ${inv.total_cents / 100:.2f} by {method.upper() if method == 'eftpos' else method}. Receipt: {get_settings().public_base_url}/api/invoices/{inv.number}/receipt - {get_settings().shop_trading_name}")
     log_event(s, "backoffice", "payment_recorded", f"{inv.number} ${amount_cents / 100:.2f} {method}", "invoice", inv.id)
     return p
 
@@ -346,10 +408,22 @@ def request_approval(s: Session, *, kind: str, title: str, detail: str, ref_tabl
     return a
 
 
-def decide_approval(s: Session, a: Approval, approve: bool) -> dict[str, Any]:
+def decide_approval(s: Session, a: Approval, approve: bool, note: str | None = None, actor: str = "owner") -> dict[str, Any]:
     a.status = ApprovalStatus.approved if approve else ApprovalStatus.rejected
     a.decided_at = datetime.utcnow()
     result: dict[str, Any] = {"approval_id": a.id, "status": a.status.value}
+    if a.kind == "invoice" and a.ref_id:
+        job = s.get(Job, a.ref_id)
+        if job and approve:
+            inv = issue_and_send_invoice(s, job)
+            result["invoice_number"] = inv.number
+        elif job:
+            # back to the owner with her note; he fixes it by saying it again
+            if note:
+                job.mechanic_notes = ((job.mechanic_notes or "") + f"\n{get_settings().approver_name}: {note}").strip()
+            from .channels.transport import send
+
+            send(s, Channel.sms, get_settings().owner_phone, f"{get_settings().approver_name} sent back {a.title}: {note or 'please check it'}")
     if approve and a.kind == "purchase_order" and a.ref_id:
         po = s.get(PurchaseOrder, a.ref_id)
         if po and po.status == POStatus.draft:
@@ -359,7 +433,7 @@ def decide_approval(s: Session, a: Approval, approve: bool) -> dict[str, Any]:
         po = s.get(PurchaseOrder, a.ref_id)
         if po:
             po.status = POStatus.cancelled
-    log_event(s, "owner", "approval_" + a.status.value, a.title, "approval", a.id)
+    log_event(s, actor, "approval_" + a.status.value, a.title + (f" ({note})" if note else ""), "approval", a.id)
     return result
 
 

@@ -112,6 +112,17 @@ class NebiusLLM:
         return LLMReply(content=content, tool_calls=calls, model=model, usage=usage)
 
 
+    def vision(self, prompt: str, image_b64: str, *, mime: str = "image/jpeg", max_tokens: int = 800) -> LLMReply:
+        model = get_settings().model_vision
+        resp = self.client.chat.completions.create(
+            model=model,
+            temperature=0,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image_b64}"}}]}],
+        )
+        return LLMReply(content=_strip_think(resp.choices[0].message.content), model=model)
+
+
 def _strip_think(text: str | None) -> str | None:
     if not text:
         return text
@@ -127,6 +138,10 @@ def _strip_think(text: str | None) -> str | None:
 class MockLLM:
     """Deterministic stand-in. It inspects the latest user turn plus any tool results
     already in the transcript and decides the next tool call or final answer."""
+
+    def vision(self, prompt: str, image_b64: str, *, mime: str = "image/jpeg", max_tokens: int = 800) -> LLMReply:
+        # Whatever the photo, the mock reads the same believable job card.
+        return LLMReply(content=MOCK_JOB_CARD, model=f"mock/{get_settings().model_vision.split('/')[-1]}")
 
     def chat(
         self,
@@ -169,6 +184,13 @@ class MockLLM:
                 intent = "change_booking"
             return say(json.dumps({"intent": intent, "urgency": "normal"}))
 
+        if json_mode and "job card" in system.lower():
+            return say(json.dumps(_mock_job_card(text)))
+
+        if json_mode and "owner" in system.lower() and "intent" in system.lower():
+            work = any(k in text for k in ("labour", "hour", "hr", "pads", "oil", "filter", "service", "replaced", "fitted"))
+            return say(json.dumps({"intent": "job_card" if work and "order" not in text and "need" not in text else "other"}))
+
         if "daily report" in system.lower() or tier == "deep":
             return say(_mock_report(messages))
 
@@ -192,6 +214,23 @@ class MockLLM:
                     f"Drafted purchase order #{po.get('po_id')} with {po.get('supplier')} and queued it for your approval. "
                     "Nothing is sent until you tap approve."
                 )
+            car = _extract_vehicle(text) or next((w for w in ("corolla", "cx-5", "mazda", "i30", "ranger", "cerato", "civic", "forester", "commodore", "hilux") if w in text), "")
+            if "paid" in text and "mark_paid" in tool_names:
+                if "mark_paid" not in done:
+                    method = next((m for m in ("cash", "transfer") if m in text), "eftpos")
+                    return call("mark_paid", car=car or text, method=method)
+                r = results.get("mark_paid", {})
+                if r.get("error"):
+                    return say("I couldn't find an unpaid invoice for that car.")
+                return say(f"Marked {r.get('number')} paid by {r.get('method', '').upper()}. Receipt texted to the customer.")
+            if any(k in text for k in ("is done", "finished", "ready", "waiting on", "waiting for")) and "update_car_status" in tool_names:
+                if "update_car_status" not in done:
+                    status = "waiting_parts" if "waiting" in text else "done"
+                    return call("update_car_status", car=car or text, status=status)
+                r = results.get("update_car_status", {})
+                if r.get("error"):
+                    return say("I couldn't tell which car you meant. Say the rego or the customer's name.")
+                return say(f"Texted {r.get('customer')} that their {r.get('vehicle', '').split(' ')[1] if r.get('vehicle') else 'car'} is {'waiting on parts' if r.get('status') == 'waiting_parts' else 'finished'}.")
             if "invoice" in text and "issue_invoice" in tool_names:
                 if "issue_invoice" not in done:
                     return call("issue_invoice", job_id=_extract_int(text, "job") or 1)
@@ -271,6 +310,65 @@ class MockLLM:
             f"You're booked in for {bk.get('day')} at {bk.get('start')} for a {bk.get('service')}. "
             f"Your reference is {bk.get('reference')}. We'll text you a reminder the day before."
         )
+
+
+MOCK_JOB_CARD = """JOB CARD
+Rego: ABC 123  Corolla
+Maria
+- Front brake pads replaced
+- Machine rotors
+Labour 1.5 hr
+Pads $119
+Paid EFTPOS"""
+
+_MOCK_PARTS = [
+    ("oil filter", "Oil filter"),
+    ("cabin filter", "Cabin filter"),
+    ("pads", "Brake pads front"),
+    ("oil", "Engine oil 5W-30"),
+    ("battery", "Battery DIN55"),
+    ("tyre", "Tyre 205/55R16"),
+    ("wiper", "Wiper blades"),
+]
+
+
+def _mock_job_card(t: str) -> dict[str, Any]:
+    """Rule-based version of what Nemotron Super extracts from the owner's words."""
+    hours: float | None = None
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(?:hours?|hrs?)\b", t)
+    if m:
+        hours = float(m.group(1))
+    elif "hour and a half" in t:
+        hours = 1.5
+    elif re.search(r"\b(?:an|one) hour\b", t):
+        hours = 1.0
+    elif "half an hour" in t:
+        hours = 0.5
+    parts, seen = [], t
+    for key, name in _MOCK_PARTS:
+        if key in seen:
+            pm = re.search(re.escape(key) + r"\s*\$\s*(\d+(?:\.\d{1,2})?)", seen)
+            parts.append({"name": name, "qty": 1, "price_dollars": float(pm.group(1)) if pm else None})
+            seen = seen.replace(key, "")
+    work = [ln.strip(" -") for ln in t.splitlines() if ln.strip().startswith("-")]
+    vehicle = _extract_vehicle(t) or next((w.title() for w in ("corolla", "cx-5", "i30", "ranger", "cerato", "civic", "forester", "commodore", "hilux") if w in t), "")
+    name = re.search(r"\n([a-z]+)\n", t)
+    return {
+        "car": vehicle,
+        "rego": _extract_rego(t) or _spaced_rego(t),
+        "customer_name": name.group(1).title() if name else "",
+        "labour_hours": hours,
+        "labour_description": ", ".join(work[:2]) if work else "Workshop labour",
+        "parts": parts,
+        "fees": [],
+        "paid_method": "eftpos" if "eftpos" in t else "",
+        "notes": "",
+    }
+
+
+def _spaced_rego(t: str) -> str:
+    m = re.search(r"rego:?\s*([a-z0-9]{2,3})\s?([a-z0-9]{3})\b", t)
+    return (m.group(1) + m.group(2)).upper() if m else ""
 
 
 def _mock_report(messages: list[dict[str, Any]]) -> str:

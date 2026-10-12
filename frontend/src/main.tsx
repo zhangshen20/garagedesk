@@ -12,9 +12,13 @@ import Approvals from "./pages/Approvals";
 import Report from "./pages/Report";
 import Outbox from "./pages/Outbox";
 import PublicChat from "./pages/PublicChat";
+import OwnerApp from "./pages/OwnerApp";
+import Approve from "./pages/Approve";
 
 const router = createBrowserRouter([
   { path: "/chat", element: <PublicChat /> },
+  { path: "/owner", element: <OwnerApp /> },
+  { path: "/approve/:id", element: <Approve /> },
   {
     path: "/",
     element: <Layout />,

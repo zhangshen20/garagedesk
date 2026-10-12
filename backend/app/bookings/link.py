@@ -163,12 +163,21 @@ def start_job(s: Session, b: SiteBooking, *, done: bool = False) -> tuple[Job, b
 
 def on_completed(s: Session, b: SiteBooking) -> dict[str, Any]:
     """The site marked the booking completed: make sure there is a finished job
-    with the booking's details on it, ready for the invoice. The invoice itself
-    is only issued once the owner confirms the work and price."""
+    with the booking's details on it, and put the invoice in front of whoever does
+    the books. Nothing is sent to the customer until she approves it. A job with
+    nothing worth invoicing stays at done so the owner can say the job instead."""
     job, created = start_job(s, b, done=True)
+    approval = None
     if created:
         svc.log_event(s, "system", "invoice_draft_started", f"{b.reference} completed on the website; job {job.id} ready to invoice", "job", job.id)
-    return {"reference": b.reference, "job_id": job.id, "created": created, "job": svc.job_view(s, job)}
+        view = svc.job_view(s, job)
+        # request_invoice_approval arrives with the owner app (PR #4); until it is
+        # on main the job simply waits at done.
+        request = getattr(svc, "request_invoice_approval", None)
+        if request is not None and view["lines"] and view["total_cents"] > 0:
+            approval = request(s, job)
+            s.flush()
+    return {"reference": b.reference, "job_id": job.id, "created": created, "approval": approval, "job": svc.job_view(s, job)}
 
 
 def handle_site_booking(s: Session, b: SiteBooking) -> dict[str, Any]:

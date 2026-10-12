@@ -142,6 +142,34 @@ def test_completed_on_site_starts_invoice_draft(client):
     assert listed["garagedesk"]["job_id"] == r["job_id"]
 
 
+def test_completed_job_goes_to_the_approver(client, monkeypatch):
+    from app import services as svc
+
+    calls = []
+
+    def fake_request(s, job):
+        calls.append(job.id)
+        return {"status": "awaiting_approval", "approval_id": 99}
+
+    monkeypatch.setattr(svc, "request_invoice_approval", fake_request, raising=False)
+    r = client.post("/api/site-bookings/SNM-9WPL/demo-complete").json()
+    assert calls == [r["job_id"]] and r["approval"]["status"] == "awaiting_approval"
+    # a repeat delivery does not ask her twice
+    client.post("/api/site-bookings/SNM-9WPL/demo-complete")
+    assert calls == [r["job_id"]]
+
+
+def test_completed_job_with_nothing_to_invoice_waits_for_owner(client, monkeypatch):
+    from app import services as svc
+
+    calls = []
+    monkeypatch.setattr(svc, "request_invoice_approval", lambda s, job: calls.append(job.id), raising=False)
+    row = {**SITE_ROW, "status": "completed", "service": "Weird rattle"}
+    monkeypatch.setattr(src.MockBookingSource, "list_bookings", lambda self, a, b: [SiteBooking.model_validate(row)])
+    s = client.post("/api/site-bookings/sync", params={"day": "2026-10-13"}).json()
+    assert s["invoice_drafts"] == ["SNM-ZZ01"] and calls == []
+
+
 def _signed(secret: str, payload: dict, ts: int | None = None) -> tuple[bytes, dict]:
     body = json.dumps(payload).encode()
     ts = str(ts or int(time.time()))

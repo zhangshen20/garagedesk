@@ -86,6 +86,21 @@ export default function Layout() {
             </dl>
           )}
           {mock && <span className="mt-2 inline-block rounded-md bg-slate-100 text-slate-500 px-1.5 py-0.5 text-[10px] font-medium">demo mode (no API key)</span>}
+          <button
+            type="button"
+            onClick={async () => {
+              if (!window.confirm("Reset the demo to its starting data? Everything done since is cleared.")) return;
+              try {
+                await api.resetDemo();
+                window.location.reload();
+              } catch {
+                window.alert("Reset is turned off on this server.");
+              }
+            }}
+            className="mt-3 block text-[11px] font-medium text-slate-400 underline hover:text-slate-600"
+          >
+            Reset demo data
+          </button>
         </footer>
       </aside>
 

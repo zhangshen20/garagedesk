@@ -197,6 +197,19 @@ def approve_decide(approval_id: int, body: ApproveIn, s: Session = Depends(get_s
     return {**_approval_view(a), **r}
 
 
+# --- demo ----------------------------------------------------------------------------
+
+
+@router.post("/demo/reset")
+def demo_reset() -> dict[str, Any]:
+    from ..db import reset_demo_data
+
+    if not get_settings().demo_reset_enabled:
+        raise HTTPException(403, "demo reset is turned off")
+    reset_demo_data()
+    return {"ok": True, "today": svc.today().isoformat()}
+
+
 # --- overview -------------------------------------------------------------------------
 
 

@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     auto_approve_invoice_under_cents: int = 0  # inc GST; 0 = she approves every invoice
     labour_rate_cents: int = 12000  # per hour, ex GST
 
+    # Lets anyone put the demo back to its clean recording state (POST /api/demo/reset).
+    # Turn off for a real shop.
+    demo_reset_enabled: bool = True
+
     app_secret: str = "change-me"
     public_base_url: str = "http://localhost:8000"
 

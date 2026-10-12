@@ -13,18 +13,21 @@ from typing import Any
 from sqlmodel import Session
 
 from ..llm import get_llm
+from . import memory
 from .backoffice import handle_owner_message
 from .jobcard import draft_from_text
 
 INTENT_PROMPT = """You route what a mechanic shop owner just said into his phone. Decide the intent of the owner's words.
 "job_card": he is describing work he finished on a car so it can be invoiced (what was done, parts fitted, labour time).
 "other": anything else: a car's progress ("Hilux is done", "waiting on parts"), a payment ("paid on EFTPOS"), ordering parts, a question.
+"Send it", a payment, or a question about a job is "other" even when the context below mentions a draft. Correcting or adding to the work on the job he is on ("make it 380 all up", "add wipers to that") is "job_card", and so is "same as last time" for a car.
 Reply with JSON only: {"intent": "job_card" | "other"}"""
 
 
-def route(text: str) -> str:
+def route(text: str, context: str = "") -> str:
+    system = INTENT_PROMPT + (f"\n\nContext:\n{context}" if context else "")
     r = get_llm().chat(
-        [{"role": "system", "content": INTENT_PROMPT}, {"role": "user", "content": text}],
+        [{"role": "system", "content": system}, {"role": "user", "content": text}],
         tier="fast",
         json_mode=True,
         max_tokens=50,
@@ -37,7 +40,13 @@ def route(text: str) -> str:
 
 
 def handle_voice(s: Session, text: str) -> dict[str, Any]:
-    if route(text) == "job_card":
-        return {"kind": "draft", **draft_from_text(s, text).as_dict()}
-    r = handle_owner_message(s, text)
-    return {"kind": "reply", "readback": r.reply, "steps": r.steps, "model": r.model}
+    out = memory.follow_up(s, text)  # "yep, send it" right after a read-back
+    if out is None:
+        ctx = memory.owner_context(s, text)
+        if route(text, ctx) == "job_card":
+            out = {"kind": "draft", **draft_from_text(s, text, context=ctx).as_dict()}
+        else:
+            r = handle_owner_message(s, text, context=ctx)
+            out = {"kind": "reply", "readback": r.reply, "steps": r.steps, "model": r.model}
+    memory.remember_turn(s, text, out)
+    return out

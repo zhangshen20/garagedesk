@@ -273,3 +273,29 @@ class EventLog(SQLModel, table=True):
     ref_table: str | None = None
     ref_id: int | None = None
     created_at: NaiveDatetime = Field(default_factory=now)
+
+
+class OwnerTurn(SQLModel, table=True):
+    """One thing the owner said into his phone and what came of it. The agent reads
+    the recent ones back so "send it", "that one" or "the Corolla from this
+    morning" mean something."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    said: str
+    kind: str = "reply"  # draft | reply | follow_up
+    outcome: str = ""  # what the agent said back
+    ready: bool = False  # a clean draft read back, waiting on "send it"
+    job_id: int | None = Field(default=None, foreign_key="job.id", index=True)
+    customer_id: int | None = Field(default=None, foreign_key="customer.id")
+    created_at: NaiveDatetime = Field(default_factory=now, index=True)
+
+
+class OwnerFact(SQLModel, table=True):
+    """Something the owner asked the agent to keep in mind ("Jack always pays cash",
+    "Maria's Corolla takes 0W-20"). Brought up whenever that customer or car is."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    fact: str
+    customer_id: int | None = Field(default=None, foreign_key="customer.id", index=True)
+    vehicle_id: int | None = Field(default=None, foreign_key="vehicle.id")
+    created_at: NaiveDatetime = Field(default_factory=now)

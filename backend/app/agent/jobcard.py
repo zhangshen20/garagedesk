@@ -84,10 +84,13 @@ def transcribe_photo(image_b64: str, mime: str = "image/jpeg") -> tuple[str, str
     return (r.content or "").strip(), r.model
 
 
-def extract(text: str) -> tuple[dict[str, Any], str]:
+def extract(text: str, context: str = "") -> tuple[dict[str, Any], str]:
+    """context: what the agent remembers (memory.owner_context), so "same again for
+    the Corolla" or "make it 380" can be filled in from earlier turns and records."""
     llm = get_llm()
+    system = EXTRACT_PROMPT + (f"\n\nContext:\n{context}" if context else "")
     r = llm.chat(
-        [{"role": "system", "content": EXTRACT_PROMPT}, {"role": "user", "content": text}],
+        [{"role": "system", "content": system}, {"role": "user", "content": text}],
         tier="main",
         json_mode=True,
         max_tokens=2000,
@@ -377,8 +380,8 @@ def add_receipt(s: Session, job: Job, image_b64: str, mime: str = "image/jpeg") 
     return Draft(ok=True, job=view, readback=f"Added {names} from the receipt. New total {view['total_cents'] / 100:,.2f} dollars including GST. Send it?", transcript=text, model=model)
 
 
-def draft_from_text(s: Session, text: str, transcript_model: str = "") -> Draft:
-    ex, model = extract(text)
+def draft_from_text(s: Session, text: str, transcript_model: str = "", context: str = "") -> Draft:
+    ex, model = extract(text, context)
     return draft_from_extracted(s, ex, text, " + ".join(m for m in (transcript_model, model) if m))
 
 

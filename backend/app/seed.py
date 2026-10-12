@@ -20,6 +20,7 @@ from .models import (
     Supplier,
     Vehicle,
 )
+from .seed_history import seed_history
 
 
 def seed_if_empty(s: Session) -> bool:
@@ -139,4 +140,5 @@ def seed(s: Session) -> None:
         Expense(day=today - timedelta(days=1), description="Fuel - parts run", amount_cents=4800, gst_cents=436, category="vehicle"),
     ])
     s.flush()
+    seed_history(s)  # the regulars' past visits, for the agent's memory (added last so ids above stay put)
     svc.log_event(s, "system", "seeded", "Demo data for Sunshine Auto Care")

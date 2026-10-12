@@ -35,7 +35,11 @@ Required by the hackathon submission. The live-test findings come from running `
 
 ## Building the owner app (2026-10-12 onwards)
 
-*Pending: findings from the Talk-to-Invoice, job card photo and approval work are added here as those features land.*
+- The vision model and Nemotron share one key and one OpenAI-compatible API, so "photo of a handwritten job card, then Nemotron Super extracts line items" was a few lines on top of the existing client. In a live run MiniCPM-V 4.5 transcribed a handwritten card in about 6 seconds, and spoken or photographed jobs became correct invoice drafts in 2-8 seconds end to end.
+- Splitting the owner pipeline into Nano (route: is this a job card, a status update or a payment?) and Super (extract line items as JSON) kept the common path fast and let us keep pricing in plain code. Nemotron decides *what* was done; it never sets a price.
+- Because Token Factory has no speech model, the owner app relies on Safari's Web Speech API, which only works on HTTPS pages. That pushed a certificate onto our demo VM earlier than we planned (an sslip.io name with Caddy and Let's Encrypt).
+
+*More findings from the owner app are added as they come in.*
 
 ## Suggestions
 - Add a speech-to-text model to Token Factory. Voice-first apps for people who don't type are a natural fit for Nemotron, and today they need a second provider.

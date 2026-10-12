@@ -1,0 +1,36 @@
+{
+  "written": {
+    "date": "12/10",
+    "customer_name": "Dave Kowalski",
+    "phone": "0433 908 117",
+    "vehicle": "Ford Ranger",
+    "rego": "1XY 9KL",
+    "odometer": "",
+    "work": "F + R pads & machine rotors\nBrake fluid flush",
+    "parts": "Pads F & R\nDOT4 1L",
+    "labour": "1 1/2",
+    "mechanic": "Sam",
+    "notes": "Cust waiting - call when done"
+  },
+  "expected": {
+    "customer_name": "Dave Kowalski",
+    "phone": "0433908117",
+    "vehicle": {
+      "make": "Ford",
+      "model": "Ranger",
+      "year": null
+    },
+    "rego": "1XY9KL",
+    "odometer_km": null,
+    "labour_hours": 1.5,
+    "parts": [
+      "pads",
+      "dot4"
+    ],
+    "work": [
+      "pads",
+      "rotors",
+      "brake fluid"
+    ]
+  }
+}

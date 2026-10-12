@@ -325,7 +325,7 @@ export const api = {
   resetDemo: () => post<{ ok: boolean; today: string }>("/api/demo/reset"),
 
   ownerVoice: (text: string) => post<OwnerResult>("/api/owner/voice", { text }),
-  ownerPhoto: (image_b64: string, mime = "image/jpeg") => post<OwnerResult>("/api/owner/photo", { image_b64, mime }),
+  ownerPhoto: (image_b64: string, mime = "image/jpeg") => post<OwnerResult>("/api/jobcards/scan", { image_b64, mime }),
   ownerToday: () => get<OwnerToday>("/api/owner/today"),
   ownerSend: (jobId: number) => post<SendResult>(`/api/owner/jobs/${jobId}/send`),
   ownerPaid: (jobId: number, method = "eftpos") => post<{ number: string; status: string }>(`/api/owner/jobs/${jobId}/paid`, { method }),

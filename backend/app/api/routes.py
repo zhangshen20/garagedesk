@@ -123,6 +123,18 @@ def owner_diag_list() -> list[dict[str, Any]]:
     return list(_DIAG)[-150:]
 
 
+def _cars_in_shop(s: Session) -> str:
+    """The cars and regos he is likely to say, so the speech model spells them right."""
+    open_statuses = [JobStatus.in_progress, JobStatus.waiting_parts, JobStatus.done]
+    jobs = s.exec(select(Job).where(Job.status.in_(open_statuses))).all()  # type: ignore[attr-defined]
+    names = []
+    for j in jobs[:12]:
+        v = s.get(Vehicle, j.vehicle_id) if j.vehicle_id else None
+        if v:
+            names.append(f"{v.make} {v.model} {v.rego}")
+    return ("Cars in the workshop: " + ", ".join(names) + ".") if names else ""
+
+
 @router.post("/owner/audio")
 def owner_audio(audio: UploadFile = File(...), s: Session = Depends(get_session)) -> dict[str, Any]:
     """What he said, recorded on the phone; transcribed here, then handled like dictation."""
@@ -135,7 +147,7 @@ def owner_audio(audio: UploadFile = File(...), s: Session = Depends(get_session)
     if len(data) < 800:
         raise HTTPException(400, "nothing heard")
     try:
-        text = transcribe(data)
+        text = transcribe(data, _cars_in_shop(s))
     except RuntimeError as e:
         raise HTTPException(503, str(e)) from None
     except Exception:

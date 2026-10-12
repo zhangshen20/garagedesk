@@ -1,6 +1,6 @@
 # Feedback on Nebius Token Factory and NVIDIA tooling
 
-Required by the hackathon submission. The live-test findings come from running `backend/scripts/live_smoke.py` against Token Factory on 2026-10-11. Findings from building the owner app (voice, job card photos, approvals) are added as those features land.
+Required by the hackathon submission. The live-test findings come from running `backend/scripts/live_smoke.py` against Token Factory on 2026-10-11. Findings from building the owner app (voice, receipt photos, approvals) are added as those features land.
 
 ## Nebius Token Factory
 
@@ -12,7 +12,7 @@ Required by the hackathon submission. The live-test findings come from running `
 - Exact Nemotron model ids are hard to find in the docs; the marketing page shows one id in a code sample and the rest only in URL-encoded catalogue links, with inconsistent casing (`nvidia/Nemotron-3_5-Lightning` vs `nvidia/nemotron-3-super-120b-a12b`). A single "models and ids" table in the docs would save every team an hour.
 - `/models` in the docs site returned an error when fetched programmatically during the build.
 - There is no speech-to-text or text-to-speech model in the catalogue (checked 2026-10-12). Our owner doesn't type, so voice is the main input; we had to use the iPhone's own dictation and Twilio's speech recognition instead. A hosted Whisper-class model next to Nemotron would let a voice-first app keep the whole pipeline on Nebius.
-- The catalogue does include vision models (MiniCPM-V 4.5, Gemma 3 27B), which is what makes "photograph the paper job card" possible on the same key.
+- The catalogue does include vision models (MiniCPM-V 4.5, Gemma 3 27B), which is what makes "photograph the supplier receipt" possible on the same key.
 
 **Live-test notes** (2026-10-11, `backend/scripts/live_smoke.py`, 8 agent turns plus one daily report)
 - All three configured ids (`nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`, `nvidia/nemotron-3-super-120b-a12b`, `nvidia/Nemotron-3-Ultra-550b-a55b`) were listed by `GET /v1/models` and accepted as-is.
@@ -35,8 +35,8 @@ Required by the hackathon submission. The live-test findings come from running `
 
 ## Building the owner app (2026-10-12 onwards)
 
-- The vision model and Nemotron share one key and one OpenAI-compatible API, so "photo of a handwritten job card, then Nemotron Super extracts line items" was a few lines on top of the existing client. In a live run MiniCPM-V 4.5 transcribed a handwritten card in about 6 seconds, and spoken or photographed jobs became correct invoice drafts in 2-8 seconds end to end.
-- Splitting the owner pipeline into Nano (route: is this a job card, a status update or a payment?) and Super (extract line items as JSON) kept the common path fast and let us keep pricing in plain code. Nemotron decides *what* was done; it never sets a price.
+- The vision model and Nemotron share one key and one OpenAI-compatible API, so "photo, then Nemotron Super extracts line items" was a few lines on top of the existing client. In a live run MiniCPM-V 4.5 transcribed a handwritten note in about 6 seconds, and spoken or photographed jobs became correct invoice drafts in 2-8 seconds end to end.
+- Splitting the owner pipeline into Nano (route: is this a finished job, a status update or a payment?) and Super (extract line items as JSON) kept the common path fast and let us keep pricing in plain code. Nemotron extracts what was done and the figures the owner said; it never makes up a price, and code fills anything he left out from the shop's rates.
 - Because Token Factory has no speech model, the owner app relies on Safari's Web Speech API, which only works on HTTPS pages. That pushed a certificate onto our demo VM earlier than we planned (an sslip.io name with Caddy and Let's Encrypt).
 
 *More findings from the owner app are added as they come in.*

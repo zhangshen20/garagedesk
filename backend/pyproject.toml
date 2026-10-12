@@ -19,6 +19,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
+# recorded speech to text on the server (owner app in non-Safari iPhone browsers)
+stt = ["faster-whisper>=1.0", "av>=11,<16"]  # av 16+ dropped an argument faster-whisper passes
 # the owner voice (app/voice/tts.py); the Docker image installs it with its model
 tts = ["kokoro-onnx>=0.4.9,<0.7"]
 

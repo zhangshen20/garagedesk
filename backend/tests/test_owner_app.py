@@ -152,3 +152,18 @@ def test_phone_mic_report_is_kept(client):
     assert r.status_code == 200
     last = client.get("/api/owner/diag").json()[-1]
     assert last["event"] == "error" and last["detail"]["code"] == "not-allowed" and last["ua"] == "iPhone test"
+
+
+def test_recorded_speech_becomes_a_draft(client):
+    # mock mode: the server's speech-to-text returns a fixed sentence
+    assert client.get("/api/owner/today").json()["stt"] is True
+    r = client.post("/api/owner/audio", files={"audio": ("talk.m4a", b"\0" * 4000, "audio/mp4")})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["kind"] == "draft" and body["heard"].startswith("Corolla ABC123")
+    assert body["job"]["total_cents"] == 35000
+
+
+def test_empty_recording_is_refused(client):
+    r = client.post("/api/owner/audio", files={"audio": ("talk.m4a", b"\0" * 10, "audio/mp4")})
+    assert r.status_code == 400

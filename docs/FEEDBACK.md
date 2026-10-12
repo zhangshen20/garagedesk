@@ -1,6 +1,6 @@
 # Feedback on Nebius Token Factory and NVIDIA tooling
 
-Required by the hackathon submission. Observations so far; the live-test section is filled in after running `backend/scripts/live_smoke.py` against Token Factory.
+Required by the hackathon submission. The live-test findings come from running `backend/scripts/live_smoke.py` against Token Factory on 2026-10-11. Findings from building the owner app (voice, job card photos, approvals) are added as those features land.
 
 ## Nebius Token Factory
 
@@ -11,6 +11,8 @@ Required by the hackathon submission. Observations so far; the live-test section
 **What was confusing**
 - Exact Nemotron model ids are hard to find in the docs; the marketing page shows one id in a code sample and the rest only in URL-encoded catalogue links, with inconsistent casing (`nvidia/Nemotron-3_5-Lightning` vs `nvidia/nemotron-3-super-120b-a12b`). A single "models and ids" table in the docs would save every team an hour.
 - `/models` in the docs site returned an error when fetched programmatically during the build.
+- There is no speech-to-text or text-to-speech model in the catalogue (checked 2026-10-12). Our owner doesn't type, so voice is the main input; we had to use the iPhone's own dictation and Twilio's speech recognition instead. A hosted Whisper-class model next to Nemotron would let a voice-first app keep the whole pipeline on Nebius.
+- The catalogue does include vision models (MiniCPM-V 4.5, Gemma 3 27B), which is what makes "photograph the paper job card" possible on the same key.
 
 **Live-test notes** (2026-10-11, `backend/scripts/live_smoke.py`, 8 agent turns plus one daily report)
 - All three configured ids (`nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B`, `nvidia/nemotron-3-super-120b-a12b`, `nvidia/Nemotron-3-Ultra-550b-a55b`) were listed by `GET /v1/models` and accepted as-is.
@@ -31,6 +33,11 @@ Required by the hackathon submission. Observations so far; the live-test section
 - Super sometimes uses Markdown tables and emoji even in plain-text channels; we keep the channel instruction short and explicit.
 - Ultra occasionally adds a detail that is a plausible inference rather than a fact in the snapshot (for example, which services the completed jobs were). For an owner-facing report that is acceptable, but it is the one place we saw anything like invention.
 
+## Building the owner app (2026-10-12 onwards)
+
+*Pending: findings from the Talk-to-Invoice, job card photo and approval work are added here as those features land.*
+
 ## Suggestions
+- Add a speech-to-text model to Token Factory. Voice-first apps for people who don't type are a natural fit for Nemotron, and today they need a second provider.
 - Publish a tool-calling reliability note per model (how often arguments are well-formed JSON, whether parallel tool calls are supported).
 - A "small business agent" cookbook recipe: Nano classify → Super act → Ultra summarise is a pattern many apps will want.

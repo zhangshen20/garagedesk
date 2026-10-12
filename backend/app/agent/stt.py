@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import logging
+import re
 import threading
 from functools import lru_cache
 
@@ -63,7 +64,18 @@ def transcribe(audio: bytes, extra_hint: str = "") -> str:
         segments, _ = _model().transcribe(
             io.BytesIO(audio), language="en", beam_size=1, vad_filter=True, initial_prompt=(_HINT + " " + extra_hint).strip()
         )
-        return " ".join(seg.text.strip() for seg in segments).strip()
+        return _fix_words(" ".join(seg.text.strip() for seg in segments).strip())
+
+
+# Whisper hears an Australian "labour" as "label" (seen live); nothing in a
+# workshop job is a "label", so put it back.
+_FIXES = [(re.compile(r"\blabels?\b", re.I), "labour")]
+
+
+def _fix_words(text: str) -> str:
+    for pattern, word in _FIXES:
+        text = pattern.sub(word, text)
+    return text
 
 
 def warm_up() -> None:

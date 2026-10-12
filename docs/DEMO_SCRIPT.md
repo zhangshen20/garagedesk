@@ -1,6 +1,6 @@
 # Demo video script (target 2:45, max 3:00)
 
-**Story:** one real moment. A car is finished, and today the owner would put down his calculator and ring his wife at her other job: "Corolla's done, front pads and machined the rotors, pads 89, hour and a half labour." She would make the tax invoice. In the video he says exactly the same words, to his phone instead, and never touches a keyboard.
+**Story:** one real moment. A car is finished, and today the owner would put down his calculator and ring his wife at her other job: "Corolla's done, front pads, hour and a half, 350 all up." She would make the tax invoice. In the video he says exactly the same words, to his phone instead, and never touches a keyboard.
 
 Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 
@@ -20,18 +20,18 @@ Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 "This is a real workshop in Sunshine North, Melbourne. The owner is a great mechanic who doesn't use computers and doesn't type. When a car is done, he works out the price on a calculator and rings his wife, and tells her what he did and how much to charge. She makes the tax invoice. But she works part-time somewhere else now, and if she can't pick up, the customer waits. GarageDesk replaces that phone call."
 
 ## 0:20–1:15  He says what he'd have told her
-*Owner app on the iPhone. Hold the big round button and say, the way he'd say it to his wife: "Corolla ABC123 is done. Front pads and machined the rotors. Pads 89, hour and a half labour."*
+*Owner app on the iPhone. Hold the big round button and say, the way he'd say it to his wife: "Corolla ABC123, front pads, hour and a half, 350 all up."*
 
-"Same words, same numbers, but he says them to his phone. Nemotron 3 Nano works out what he's asking for in under a second, and Nemotron 3 Super turns it into invoice lines. His figures are the charge. Anything he doesn't say, like the labour rate, comes from the shop's own settings, never from the AI's imagination. And Maria and her Corolla were already on the board from her online booking, so he didn't have to say who it was for."
+"Same words, same numbers, but he says them to his phone. Nemotron 3 Nano works out what he's asking for in under a second, and Nemotron 3 Super turns it into invoice lines. His figures are the charge: three hundred and fifty, all up, is what the customer pays. The pads are priced from the shop's own list and the rest goes on labour, never a number the AI made up. And Maria and her Corolla were already on the board from her online booking, so he didn't have to say who it was for."
 
-*The phone reads back: "Invoice for Maria's Toyota Corolla: brake pads front 89 dollars, 1.5 hours labour. 287 dollars including GST. Send it?" Tap Send.*
+*The phone reads back: "Invoice for Maria's Toyota Corolla: labour 219.10 and brake pads front 130.90. 350.00 dollars including GST. Send it?" Tap Send.*
 
 "It reads his numbers back, the way his wife would have. If something's off, he just says it again."
 
 ## 1:15–1:25  A parts receipt instead of a list
-*Tap the photo button and shoot the supplier's receipt. The parts appear on the job.*
+*On a second car, tap "Add parts from a receipt photo" on the draft and shoot the supplier's receipt. The parts appear on the job and the new total is read back.*
 
-"If there's a long list of parts, he doesn't read it out. He photographs the supplier's receipt, and a vision model on Nebius puts the parts on the job."
+"If there's a long list of parts, he doesn't read it out. He photographs the supplier's receipt. A vision model on Nebius puts the parts on the job and books the receipt as an expense, GST and all."
 
 ## 1:25–1:55  His wife approves from her other job
 *Second phone: the text arrives. Tap the link, show the invoice with GST split out, tap "Approve and send".*
@@ -39,7 +39,7 @@ Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 "Instead of a phone call, his wife gets a text. She checks the invoice on her break and taps once. She stays in control of the books without being in the shop. If something's wrong she taps Fix, writes a note, and it goes back to him. A five-minute interruption for two people becomes a three-second tap for one."
 
 ## 1:55–2:15  The customer, and getting paid
-*Customer's phone (Outbox): "Hi Maria, your Toyota Corolla is ready to collect. Tax invoice INV-… for $287.00 inc GST". Open the PDF: an Australian tax invoice with ABN and GST. Back on the owner app, tap Paid EFTPOS on the Corolla; the receipt text appears.*
+*Customer's phone (Outbox): "Hi Maria, your Toyota Corolla is ready to collect. Tax invoice INV-… for $350.00 inc GST". Open the PDF: an Australian tax invoice with ABN and GST. Back on the owner app, tap Paid EFTPOS on the Corolla; the receipt text appears.*
 
 "Maria knows her car is ready before she walks in, and she gets a proper Australian tax invoice. She pays on the EFTPOS terminal, he taps Paid, and the receipt goes out. The shop has no accounting software, and now it doesn't need any."
 

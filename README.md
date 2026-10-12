@@ -34,8 +34,8 @@ One huge hold-to-talk button. No login, no forms, no app store.
 
 | He does | GarageDesk does |
 |---|---|
-| Holds the button and says what he'd tell his wife: *"Corolla ABC123 is done. Front pads and machined the rotors. Pads 89, hour and a half labour."* | Nemotron 3 Nano routes it in under a second; Nemotron 3 Super turns it into line items as JSON; code finds the job, uses his figures as the charge, and fills only what he didn't say (labour at the shop's $120 an hour plus GST). The draft is read back out loud: *"Invoice for Maria's Toyota Corolla: brake pads front 89 dollars, 1.5 hours labour. 287 dollars including GST. Send it?"* He taps Send. |
-| Takes a photo of a supplier receipt | A vision model on Token Factory (MiniCPM-V 4.5) reads it and adds the parts to the job, so he doesn't have to read them out |
+| Holds the button and says what he'd tell his wife: *"Corolla ABC123, front pads, hour and a half, 350 all up."* | Nemotron 3 Nano routes it in under a second; Nemotron 3 Super turns it into line items as JSON; code finds the job and uses his figures as the charge: a price per item, a labour amount, or a total ("350 all up" puts the balance after parts on the labour line). Only prices he didn't say come from the shop's parts list, and labour from $120 an hour plus GST. The draft is read back out loud: *"Invoice for Maria's Toyota Corolla: labour 219.10 and brake pads front 130.90. 350.00 dollars including GST. Send it?"* He taps Send. |
+| Taps "Add parts from a receipt photo" on the draft and photographs the supplier's receipt | A vision model on Token Factory (MiniCPM-V 4.5) reads it, adds each part to the job at cost, books the receipt as a parts expense with its GST, and reads back the new total |
 | Says *"The CX-5 is waiting on parts till Thursday"* | Texts that customer, so fewer people walk in to ask |
 | Taps Paid EFTPOS, or says *"Corolla paid on EFTPOS"* | Marks the invoice paid with the method and texts the receipt |
 | Says *"need front pads for the Mazda"* | Finds the price (shop catalogue plus Tavily live search) and drafts a parts order that waits for approval |
@@ -60,14 +60,13 @@ Bookings made on the shop's website flow onto the board, and a job opens prefill
 |---|---|
 | Owner iPhone app, hold-to-talk, read-back | Built |
 | Talk-to-Invoice | Built |
-| Photo of a supplier receipt adds parts to the job | Built |
+| Supplier receipt photo adds parts and books the expense | Built |
 | Wife approves or fixes from a text link | Built |
 | "Car is ready" and status texts | Built |
 | Paid on EFTPOS with receipt text | Built |
 | Prefill jobs from the shop's booking website | Built (mock bookings until the site exposes its read endpoint) |
 | Phone, SMS and web chat front desk; parts lookup and orders; daily report | Built |
 | Quarterly GST summary for the BAS, CSV export | Next |
-| Supplier receipt photos to expenses | Next |
 
 ### Nemotron tiers, each where it earns its keep
 

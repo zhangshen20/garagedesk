@@ -15,8 +15,8 @@ Every invoicing app assumes someone sitting at a desk. He will never be that per
 ## What it does
 The owner never types. He says what he would have said to his wife on the phone, and taps once.
 
-- **Talk-to-Invoice.** He holds one big button on his iPhone and says exactly what he'd have told his wife: *"Corolla ABC123 is done. Front pads and machined the rotors. Pads 89, hour and a half labour."* GarageDesk finds the car and customer, uses his figures as the charge, fills in only what he left out (labour at $120 an hour plus GST), and reads it back: *"Invoice for Maria's Toyota Corolla: brake pads front 89 dollars, 1.5 hours labour. 287 dollars including GST. Send it?"* He taps Send.
-- **Photo of a supplier receipt.** Instead of reading out a list of parts, he can photograph the parts receipt. A vision model reads it and the parts go onto the job.
+- **Talk-to-Invoice.** He holds one big button on his iPhone and says exactly what he'd have told his wife: *"Corolla ABC123, front pads, hour and a half, 350 all up."* GarageDesk finds the car and customer and uses his figures as the charge, whether he gives a price per item, a labour amount or a total. Only what he didn't price comes from the shop's list. It reads it back: *"Invoice for Maria's Toyota Corolla: labour 219.10 and brake pads front 130.90. 350.00 dollars including GST. Send it?"* He taps Send.
+- **Add parts from a receipt photo.** Instead of reading out a list of parts, he photographs the supplier's receipt. A vision model reads it, the parts go onto the job at cost, and the receipt is booked as an expense with its GST.
 - **His wife approves from anywhere.** Instead of a phone call she gets a text with a link, checks the invoice with GST shown, and taps Approve, or Fix with a note that goes back to him. She stays in control of the books without being in the shop.
 - **"Your car is ready."** Once she approves, the customer gets a text with the GST tax invoice PDF. *"The CX-5 is waiting on parts till Thursday"* becomes a text to that customer too, so fewer people walk in to ask.
 - **Paid on EFTPOS, one tap.** The invoice is marked paid with the method and the receipt is texted. The shop has no accounting software; GarageDesk is the books.
@@ -39,7 +39,7 @@ The design follows five rules written for this owner: speak, snap or tap, never 
 ## Challenges
 - **Designing for someone who will never open a dashboard.** Our first version was a capable AI back office with a dashboard and a chat box, which was exactly the interface the owner couldn't use. Rebuilding around his voice and one button was the real work. We even got his habits wrong at first: we assumed paper job cards, but he has none. He does the sums on a calculator and phones his wife. So the app now copies that phone call exactly, his words and his numbers.
 - **Making an agent safe for real money.** Nothing that leaves the shop goes without a person: the owner hears every total read back, his wife approves every invoice, and supplier orders wait for a tap. The agent never invents a price.
-- **Shop talk with numbers in it.** "Pads 89, hour and a half" has to become exact parts, quantities and labour lines, with his figures as the charge and nothing made up for what he didn't say.
+- **Shop talk with numbers in it.** "Front pads, hour and a half, 350 all up" has to become exact parts, quantities and labour lines, with his figures as the charge and nothing made up for what he didn't say.
 - **Reasoning tokens and output budgets** on Token Factory, described under "What we learned".
 
 ## Accomplishments
@@ -56,7 +56,6 @@ The bigger lesson was about the user. The most useful thing an AI agent can do f
 - Put it in the owner's hands with his real labour rate and price list, and measure the number that matters: admin calls to his wife per day.
 - Switch the booking link from demo bookings to the live website once it exposes its read endpoint.
 - A quarterly GST summary for the BAS and a CSV for the accountant.
-- Supplier receipt photos recorded as expenses with GST.
 - A spoken 30-second end-of-day summary instead of a written report.
 - WhatsApp voice notes as another way to talk to it, then a second shop.
 

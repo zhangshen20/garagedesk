@@ -20,7 +20,7 @@ Every scene below runs on the live demo today. The one prerequisite is the HTTPS
 "This is a real workshop in Sunshine North, Melbourne. The owner is a great mechanic who doesn't use computers and doesn't type. His wife did the tax invoices, but she works part-time somewhere else now. So when a car is finished, he rings her at her other job to make the invoice. If she can't pick up, the customer waits. GarageDesk replaces that phone call."
 
 ## 0:20–1:05  He says the job
-*Owner app on the iPhone. Hold the big orange button and say: "Corolla ABC123 done. New front pads, machined the rotors, hour and a half."*
+*Owner app on the iPhone. Hold the big round button and say: "Corolla ABC123 done. New front pads, machined the rotors, hour and a half."*
 
 "He holds one button and says what he did, the way he'd say it to an apprentice. Nemotron 3 Nano works out what he's asking for in under a second. Nemotron 3 Super turns the slang into invoice lines. Then plain code prices the parts from the shop's own list and the labour from his hourly rate. The model never invents a price. And the customer and car were already on the board from her online booking, so he only said what was different."
 

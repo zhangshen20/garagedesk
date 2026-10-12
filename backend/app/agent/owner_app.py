@@ -37,7 +37,13 @@ def route(text: str) -> str:
 
 
 def handle_voice(s: Session, text: str) -> dict[str, Any]:
+    from ..voice.flow import reply_to_offer, with_voice
+
+    # "yes" / "nah" answers the step the app just offered (send it, mark it paid)
+    short = reply_to_offer(s, text)
+    if short is not None:
+        return short
     if route(text) == "job_card":
-        return {"kind": "draft", **draft_from_text(s, text).as_dict()}
+        return with_voice({"kind": "draft", **draft_from_text(s, text).as_dict()})
     r = handle_owner_message(s, text)
-    return {"kind": "reply", "readback": r.reply, "steps": r.steps, "model": r.model}
+    return with_voice({"kind": "reply", "readback": r.reply, "steps": r.steps, "model": r.model})

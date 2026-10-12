@@ -64,6 +64,10 @@ async def lifespan(app: FastAPI):
         with session_scope() as s:
             seed_if_empty(s)
     log.info("GarageDesk up. LLM mode=%s main=%s", settings.effective_llm_mode, settings.model_main)
+    from .voice import tts
+
+    log.info("Owner voice: %s", tts.mode())
+    tts.warm()
     scheduler = BackgroundScheduler(timezone=settings.shop_timezone)
     scheduler.add_job(_end_of_day_job, CronTrigger(hour=17, minute=45))
     scheduler.add_job(_reminders_job, CronTrigger(hour=16, minute=0))

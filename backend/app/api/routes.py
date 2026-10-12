@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
@@ -42,6 +42,7 @@ from ..models import (
     Supplier,
     Vehicle,
 )
+from ..voice import offers, tts
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -162,6 +163,8 @@ def owner_today(s: Session = Depends(get_session)) -> dict[str, Any]:
         "approver": settings.approver_name,
         "jobs": [_owner_job_view(s, j) for j in jobs],
         "arriving": [svc.booking_view(s, b) for b in waiting if not s.exec(select(Job).where(Job.booking_id == b.id)).first()],
+        "tts": tts.available(),
+        "offer": offers.current(),
     }
 
 
@@ -174,6 +177,7 @@ def owner_send(job_id: int, s: Session = Depends(get_session)) -> dict[str, Any]
         raise HTTPException(400, "job card is empty")
     r = svc.request_invoice_approval(s, j)
     s.commit()
+    offers.clear()
     return r
 
 
@@ -191,7 +195,9 @@ def owner_receipt(job_id: int, body: PhotoIn, s: Session = Depends(get_session))
         raise HTTPException(413, "photo too large")
     r = add_receipt(s, j, b64, body.mime)
     s.commit()
-    return {"kind": "draft", **r.as_dict()}
+    from ..voice.flow import with_voice
+
+    return with_voice({"kind": "draft", **r.as_dict()})
 
 
 class PaidIn(BaseModel):
@@ -205,7 +211,31 @@ def owner_paid(job_id: int, body: PaidIn, s: Session = Depends(get_session)) -> 
         raise HTTPException(404, "no unpaid invoice for that job")
     svc.record_payment(s, inv, inv.total_cents, body.method)
     s.commit()
+    o = offers.current()
+    if o and o.get("job_id") == job_id:
+        offers.clear()
     return {"number": inv.number, "status": inv.status.value, "method": body.method}
+
+
+# --- the voice he hears --------------------------------------------------------------
+
+
+@router.get("/tts")
+def speak(t: str) -> Response:
+    """One sentence of the read-back as audio (WAV). The page plays it in any browser;
+    503 means use the browser's own voice."""
+    if not tts.available():
+        raise HTTPException(503, "server voice is off")
+    if not t.strip():
+        raise HTTPException(400, "nothing to say")
+    if len(t) > tts.MAX_CHARS:
+        raise HTTPException(413, "too long: one sentence at a time")
+    try:
+        audio = tts.synth(t)
+    except Exception as e:  # model missing or broken: fall back to the browser voice
+        logging.getLogger("garagedesk.tts").exception("tts failed")
+        raise HTTPException(503, "server voice failed") from e
+    return Response(audio, media_type="audio/wav", headers={"Cache-Control": "public, max-age=86400"})
 
 
 # --- approve page for whoever does the books (link texted to her phone) -----------------
@@ -243,6 +273,10 @@ def approve_decide(approval_id: int, body: ApproveIn, s: Session = Depends(get_s
         return _approval_view(a)
     r = svc.decide_approval(s, a, body.approve, note=body.note, actor="approver")
     s.commit()
+    if a.kind == "invoice" and a.ref_id:
+        from ..voice.flow import after_approval
+
+        after_approval(s, s.get(Job, a.ref_id), body.approve, body.note)
     return {**_approval_view(a), **r}
 
 
@@ -256,6 +290,7 @@ def demo_reset() -> dict[str, Any]:
     if not get_settings().demo_reset_enabled:
         raise HTTPException(403, "demo reset is turned off")
     reset_demo_data()
+    offers.clear()
     return {"ok": True, "today": svc.today().isoformat()}
 
 

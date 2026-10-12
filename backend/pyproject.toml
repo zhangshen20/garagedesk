@@ -19,6 +19,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
+# the owner voice (app/voice/tts.py); the Docker image installs it with its model
+tts = ["kokoro-onnx>=0.4.9,<0.7"]
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -256,11 +256,26 @@ export interface OwnerJob extends Job {
   approval: { id: number; status: "pending" | "approved" | "rejected" } | null;
 }
 
+/** The next step the app just offered out loud; a plain "yes" does it. */
+export interface OwnerOffer {
+  id: number;
+  action: "send" | "paid" | "none";
+  job_id: number | null;
+  say: string;
+}
+
 export interface OwnerResult {
-  kind: "draft" | "reply";
+  kind: "draft" | "reply" | "done";
   ok?: boolean;
   job?: Job | null;
   readback: string;
+  /** what is spoken: the short version of readback */
+  say?: string;
+  /** the whole written readback, money as words */
+  say_full?: string;
+  offer?: OwnerOffer | null;
+  /** kind "done": what a short yes did */
+  action?: "sent" | "paid" | "";
   warnings?: string[];
   transcript?: string;
   paid_method?: string;
@@ -273,6 +288,9 @@ export interface OwnerToday {
   approver: string;
   jobs: OwnerJob[];
   arriving: Booking[];
+  /** the server can speak (otherwise the browser's voice does) */
+  tts?: boolean;
+  offer?: OwnerOffer | null;
 }
 
 export interface SendResult {

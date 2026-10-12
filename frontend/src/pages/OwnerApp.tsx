@@ -31,6 +31,21 @@ type Recognition = {
  * ("service-not-allowed"); only Safari can listen. */
 const IOS_OTHER_BROWSER = /CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent);
 
+/** Every iPhone browser can record audio, even where the speech API is refused. */
+const CAN_RECORD =
+  typeof window !== "undefined" && window.isSecureContext && Boolean(navigator.mediaDevices?.getUserMedia) && typeof window.MediaRecorder !== "undefined";
+
+function recordingType(): string {
+  for (const m of ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"]) {
+    try {
+      if (MediaRecorder.isTypeSupported?.(m)) return m;
+    } catch {
+      /* ignore */
+    }
+  }
+  return "";
+}
+
 function makeRecognition(): Recognition | null {
   const w = window as unknown as { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition };
   const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
@@ -87,9 +102,10 @@ function micProblem(code: string): string {
   return "The voice didn't start. Use the keyboard microphone instead.";
 }
 
-const TYPE_KEY = "garagedesk.owner.type";
+const TYPE_KEY = "garagedesk.owner.type2";
+const RECORD_FAILS_KEY = "garagedesk.owner.recordfails";
 // Some iPhones only start the microphone on a finished tap, not on a press.
-const PRESS_KEY = "garagedesk.owner.pressfails";
+const PRESS_KEY = "garagedesk.owner.pressfails2";
 
 function flag(key: string): boolean {
   try {
@@ -159,11 +175,16 @@ export default function OwnerApp() {
   const finishRef = useRef<((why: string) => void) | null>(null);
   const photoRef = useRef<HTMLInputElement>(null);
   const receiptJob = useRef<number | null>(null);
-  const canListen = useRef<boolean>(makeRecognition() !== null);
+  const canSpeech = useRef<boolean>(makeRecognition() !== null);
+  const canListen = useRef<boolean>(canSpeech.current || CAN_RECORD);
   const [typing, setTyping] = useState<boolean>(() => !canListen.current || prefersTyping());
-  const [micNote, setMicNote] = useState(
-    IOS_OTHER_BROWSER ? "Chrome on iPhone can't use the talk button. Open this link in Safari to talk, or tap the box and use the keyboard microphone." : "",
-  );
+  const [micNote, setMicNote] = useState("");
+  // recording on the phone and transcribing on our server is the main path: it
+  // works the same in Safari, Chrome and in-app browsers. The page speech API is
+  // the fallback when the server can't transcribe.
+  const media = useRef<{ rec: MediaRecorder; stream: MediaStream; chunks: Blob[]; limit: number } | null>(null);
+  const recording = useRef(false);
+  const useRecorder = () => CAN_RECORD && (today?.stt ?? true) && !(flag(RECORD_FAILS_KEY) && canSpeech.current);
   const errRef = useRef("");
   const [pressing, setPressing] = useState(false);
   const phaseRef = useRef<Phase>("idle");
@@ -185,6 +206,7 @@ export default function OwnerApp() {
       diag("open", {
         speech: Boolean(w.SpeechRecognition),
         webkitSpeech: Boolean(w.webkitSpeechRecognition),
+        canRecord: CAN_RECORD,
         secure: window.isSecureContext,
         standalone: standalone(),
         mic,
@@ -354,6 +376,117 @@ export default function OwnerApp() {
     }, 1800);
   }
 
+  async function startRecording(by: "press" | "tap") {
+    window.speechSynthesis?.cancel();
+    recording.current = true;
+    startedBy.current = by;
+    startedOk.current = false;
+    setHeard("");
+    setMicNote("");
+    setResult(null);
+    setPhase("listening");
+    const asked = Date.now();
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      recording.current = false;
+      setPhase("idle");
+      const name = (err as Error)?.name ?? String(err);
+      diag("rec-error", { by, name });
+      if (name === "NotAllowedError") {
+        setMicNote("The microphone is blocked for this page. Tap the AA or settings icon next to the address, allow the microphone, and try again. Or use the keyboard microphone.");
+      } else {
+        setMicNote("The microphone didn't start. Try again, or use the keyboard microphone.");
+      }
+      return;
+    }
+    if (!recording.current) {
+      // stopped before the microphone opened
+      stream.getTracks().forEach((tr) => tr.stop());
+      return;
+    }
+    // a permission prompt in between means he lifted his finger to answer it: keep recording until a tap
+    if (Date.now() - asked > 800) startedBy.current = "tap";
+    const type = recordingType();
+    let rec: MediaRecorder;
+    try {
+      rec = type ? new MediaRecorder(stream, { mimeType: type }) : new MediaRecorder(stream);
+    } catch (err) {
+      stream.getTracks().forEach((tr) => tr.stop());
+      recording.current = false;
+      setPhase("idle");
+      diag("rec-error", { by, name: "MediaRecorder", message: String(err) });
+      setFlag(RECORD_FAILS_KEY, true);
+      setMicNote("This phone can't record here. Tap the button again, or use the keyboard microphone.");
+      return;
+    }
+    const chunks: Blob[] = [];
+    rec.ondataavailable = (e) => {
+      if (e.data && e.data.size) chunks.push(e.data);
+    };
+    rec.onstop = () => {
+      stream.getTracks().forEach((tr) => tr.stop());
+      const m = media.current;
+      if (m) clearTimeout(m.limit);
+      media.current = null;
+      recording.current = false;
+      const blob = new Blob(chunks, { type: rec.mimeType || type || "audio/mp4" });
+      diag("rec-stop", { by, bytes: blob.size, type: blob.type });
+      void submitAudio(blob);
+    };
+    const limit = window.setTimeout(() => stopRecording(), 45000);
+    media.current = { rec, stream, chunks, limit };
+    rec.start(250);
+    startedOk.current = true;
+    diag("rec-start", { by: startedBy.current, type: rec.mimeType || type });
+  }
+
+  function stopRecording() {
+    unlockSpeech();
+    const m = media.current;
+    if (!m) {
+      recording.current = false; // still waiting for the microphone: drop it when it opens
+      return;
+    }
+    // let the last word land
+    setTimeout(() => {
+      try {
+        if (m.rec.state !== "inactive") m.rec.stop();
+      } catch {
+        /* already stopped */
+      }
+    }, 300);
+  }
+
+  async function submitAudio(blob: Blob) {
+    if (blob.size < 800) {
+      setPhase("idle");
+      setMicNote("I didn't catch that. Hold the button while you talk, or tap once, talk, and tap again.");
+      return;
+    }
+    setPhase("thinking");
+    setHeard("Listening back…");
+    try {
+      const r = await api.ownerAudio(blob);
+      setHeard(r.heard ?? r.transcript ?? "");
+      setResult(r);
+      speak(r.readback);
+      refresh();
+    } catch (e) {
+      const status = (e as { status?: number }).status;
+      diag("audio-failed", { status, message: String((e as Error).message ?? e) });
+      setHeard("");
+      setMicNote(status === 400 ? "I didn't hear anything. Try again a bit closer to the phone." : "Sorry, I couldn't make that out. Try again, or use the keyboard microphone.");
+    } finally {
+      setPhase((p) => (p === "thinking" ? "idle" : p));
+    }
+  }
+
+  const active = () => recording.current || recRef.current !== null;
+  const begin = (by: "press" | "tap") => (useRecorder() ? void startRecording(by) : startListening(by));
+  const end = () => (recording.current ? stopRecording() : stopListening());
+
   // Hold to talk and tap to talk both work. A press starts listening straight
   // away where the phone allows it; letting go after a real hold sends it. A
   // quick tap keeps listening until the next tap. Phones that only allow the
@@ -367,25 +500,25 @@ export default function OwnerApp() {
     if (phaseRef.current !== "idle") return;
     pressAt.current = Date.now();
     setPressing(true);
-    if (!pressFails.current) startListening("press");
+    if (useRecorder() || !pressFails.current) begin("press");
   }
 
   function onPressEnd() {
     setPressing(false);
     const held = Date.now() - pressAt.current;
-    if (recRef.current && startedBy.current === "press" && held > 700 && !stopOnTap.current) {
+    if (active() && startedBy.current === "press" && held > 700 && !stopOnTap.current) {
       pressAt.current = 0;
-      stopListening();
+      end();
     }
   }
 
   function onTap() {
     if (stopOnTap.current) {
       stopOnTap.current = false;
-      stopListening();
+      end();
       return;
     }
-    if (phaseRef.current === "idle" && !recRef.current) startListening("tap");
+    if (phaseRef.current === "idle" && !active()) begin("tap");
   }
 
   async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {

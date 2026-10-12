@@ -12,7 +12,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PORT=8000
 WORKDIR /app
 COPY backend/pyproject.toml ./
 COPY backend/app ./app
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir ".[stt]" \
+ && python -c "from faster_whisper import WhisperModel; WhisperModel('base.en', device='cpu', compute_type='int8')"
 COPY --from=web /backend/static ./static
 RUN mkdir -p /data/files
 ENV DATABASE_URL=sqlite:////data/garagedesk.db FILES_DIR=/data/files

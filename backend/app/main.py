@@ -63,6 +63,9 @@ async def lifespan(app: FastAPI):
 
         with session_scope() as s:
             seed_if_empty(s)
+    from .agent.stt import warm_up
+
+    warm_up()
     log.info("GarageDesk up. LLM mode=%s main=%s", settings.effective_llm_mode, settings.model_main)
     scheduler = BackgroundScheduler(timezone=settings.shop_timezone)
     scheduler.add_job(_end_of_day_job, CronTrigger(hour=17, minute=45))

@@ -1,0 +1,37 @@
+{
+  "written": {
+    "date": "12/10/26",
+    "customer_name": "Maria Nguyen",
+    "phone": "0412 345 678",
+    "vehicle": "Toyota Corolla 2017",
+    "rego": "ABC123",
+    "odometer": "84,210 km",
+    "work": "Logbook service 90,000\nReplace front brake pads\nTop up coolant",
+    "parts": "Oil filter x1\nEngine oil 5W-30 5L\nFront brake pads (Bendix) x1 set",
+    "labour": "2.5",
+    "mechanic": "Tony",
+    "notes": "Rear tyres getting low, told cust"
+  },
+  "expected": {
+    "customer_name": "Maria Nguyen",
+    "phone": "0412345678",
+    "vehicle": {
+      "make": "Toyota",
+      "model": "Corolla",
+      "year": 2017
+    },
+    "rego": "ABC123",
+    "odometer_km": 84210,
+    "labour_hours": 2.5,
+    "parts": [
+      "oil filter",
+      "engine oil",
+      "brake pads"
+    ],
+    "work": [
+      "logbook service",
+      "brake pads",
+      "coolant"
+    ]
+  }
+}

@@ -1,6 +1,6 @@
-# Link to the Sunshine North Mechanic booking site
+# Link to the shop's booking website
 
-The shop's website (Cloudflare Worker + D1, repo `zhangshen20/sunshine-auto-care`) is
+The shop's website (Cloudflare Worker + D1) is
 where customers book. GarageDesk reads those bookings so the owner never types a
 customer's name, phone, car or rego again, and so marking a booking **completed** on
 the site starts the invoice.
@@ -54,7 +54,7 @@ blank, `work_done` when the booked service has no typical labour line.
 
 | Variable | Meaning |
 | --- | --- |
-| `SITE_BOOKINGS_URL` | Site base URL, e.g. `https://www.sunshinenthmechanic.com.au`. Unset means the mock source |
+| `SITE_BOOKINGS_URL` | Site base URL, e.g. `https://www.example-workshop.com.au`. Unset means the mock source |
 | `SITE_BOOKINGS_TOKEN` | Bearer token for the read endpoint |
 | `SITE_WEBHOOK_SECRET` | Shared secret for webhook signatures. Unset means the webhook answers 503 |
 | `SITE_BOOKINGS_MODE` | `auto` (default), `http` or `mock` |

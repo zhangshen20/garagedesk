@@ -37,7 +37,7 @@ class Settings(BaseSettings):
 
     # --- The shop ----------------------------------------------------------------------
     shop_name: str = "Sunshine Auto Care"
-    shop_trading_name: str = "Sunshine North Mechanic"
+    shop_trading_name: str = "Sunshine Auto Care"
     shop_abn: str = "12 345 678 901"
     shop_address: str = "Whitehill Ave, Sunshine North VIC 3020"
     shop_phone: str = "(03) 9000 0000"

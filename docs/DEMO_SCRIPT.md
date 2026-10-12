@@ -29,7 +29,7 @@ Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 "It reads his numbers back, the way his wife would have. If something's off, he just says it again."
 
 ## 1:15–1:25  A parts receipt instead of a list
-*On a second car, tap "Add parts from a receipt photo" on the draft and shoot the supplier's receipt. The parts appear on the job and the new total is read back.*
+*A second job: he says "CX-5 1KR9ZZ, machined the rotors, one hour labour", then taps "Add parts from a receipt photo" on the draft and shoots the supplier's receipt. The parts appear on the job and the new total is read back.*
 
 "If there's a long list of parts, he doesn't read it out. He photographs the supplier's receipt. A vision model on Nebius puts the parts on the job and books the receipt as an expense, GST and all."
 

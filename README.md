@@ -1,24 +1,26 @@
 # GarageDesk
 
-**Replace the phone call to his wife.** A no-typing back office for a one-owner mechanic shop: he talks or photographs his paper job card, NVIDIA Nemotron on Nebius Token Factory builds the GST tax invoice, his wife approves it with one tap from wherever she is, and the customer gets a "your car is ready" text.
+**Replace the phone call to his wife.** A no-typing back office for a one-owner mechanic shop: he says what he would have told his wife on the phone, NVIDIA Nemotron on Nebius Token Factory turns it into a GST tax invoice, his wife approves it with one tap from wherever she is, and the customer gets a "your car is ready" text.
 
 Built for the Nebius x NVIDIA Global AI Hackathon (track: Best Apps & Agents) with a real workshop in Sunshine North, Melbourne. In the app the shop appears as **Sunshine Auto Care**.
 
-> **Live demo:** owner app at https://66-201-4-40.sslip.io/owner (open it on an iPhone), dashboard at https://66-201-4-40.sslip.io/ and customer chat at https://66-201-4-40.sslip.io/chat, on a Nebius AI Cloud VM calling live Nemotron models. The plain-HTTP address http://66.201.4.40/ also works, but iPhone speech recognition needs the HTTPS one. *(The HTTPS address goes live with the next redeploy.)*
+> **Live demo:** owner app at https://66-201-4-40.sslip.io/owner (open it on an iPhone), dashboard at https://66-201-4-40.sslip.io/ and customer chat at https://66-201-4-40.sslip.io/chat, on a Nebius AI Cloud VM calling live Nemotron models. Use the HTTPS address on an iPhone: Safari only allows speech recognition on secure pages.
 >
 > Demo mode works with **no API keys at all**. Add a Nebius key and the same code runs on live Nemotron models.
 
 ## The owner this is for
 
-The owner is a good mechanic. He is not comfortable with computers and doesn't type. His day is spent under cars, directing his staff, answering customers who walk in to ask "is it ready?", and ringing suppliers for parts. Job cards are written on paper. Customers pay on EFTPOS. There is no accounting software.
+The owner is a good mechanic. He is not comfortable with computers and doesn't type. His day is spent under cars, directing his staff, answering customers who walk in to ask "is it ready?", and ringing suppliers for parts. There are no job cards and no software: when a car is done he works out the charge on a calculator. Customers pay on EFTPOS.
 
-His wife used to do the admin, including the GST tax invoices. She now works part-time somewhere else, so when a car is finished he phones her and she makes the invoice over the phone. If she can't answer, the customer waits.
+His wife used to do the admin, including the GST tax invoices. She now works part-time somewhere else, so when a car is finished he phones her and tells her what work was done, the parts, and how much to charge, and she makes the tax invoice. If she can't answer, the customer waits.
+
+GarageDesk takes that exact phone call. He says the same words to his phone instead of to his wife, and gets the same tax invoice.
 
 Invoicing software assumes someone sitting at a desk. He will never be that person. So GarageDesk is built around five rules:
 
-1. **Speak, snap or tap. Never type.** His voice, his phone camera, or one big button.
+1. **Say it the way he'd say it on the phone. Never type.** His own words and his own figures, one big button.
 2. **Works with dirty hands.** One press-and-hold button you can hit with a knuckle. No login mid-job.
-3. **Read it back before it leaves.** Anything that goes to a customer or costs money is read to him in one sentence, and he says yes or no.
+3. **His numbers, read back before it leaves.** The amounts he says are the charge. The invoice is read to him in one sentence, and he says yes or no.
 4. **His wife stays in control, from anywhere.** She approves every invoice with one tap on her phone.
 5. **It knows the shop already.** Customer, car, rego and booked service come from the booking, so he only says what is different.
 
@@ -32,13 +34,13 @@ One huge hold-to-talk button. No login, no forms, no app store.
 
 | He does | GarageDesk does |
 |---|---|
-| Holds the button: *"Corolla ABC123 done, front pads, machined the rotors, hour and a half."* | Nemotron 3 Nano routes it in under a second; Nemotron 3 Super turns the slang into line items as JSON; code finds the job and prices parts from the shop's catalogue and labour from its hourly rate. The draft is read back out loud: *"Invoice for Maria's Toyota Corolla: 1.5 hours labour and brake pads front. 328.90 dollars including GST. Send it?"* He taps Send. |
-| Taps "Photo of job card" and photographs his handwritten card | A vision model on Token Factory (MiniCPM-V 4.5) transcribes the handwriting and the same pipeline builds the invoice |
+| Holds the button and says what he'd tell his wife: *"Corolla ABC123, front pads, hour and a half, 350 all up."* | Nemotron 3 Nano routes it in under a second; Nemotron 3 Super turns it into line items as JSON; code finds the job and uses his figures as the charge: a price per item, a labour amount, or a total ("350 all up" puts the balance after parts on the labour line). Only prices he didn't say come from the shop's parts list, and labour from $120 an hour plus GST. The draft is read back out loud: *"Invoice for Maria's Toyota Corolla: labour 219.10 and brake pads front 130.90. 350.00 dollars including GST. Send it?"* He taps Send. |
+| Taps "Add parts from a receipt photo" on the draft and photographs the supplier's receipt | A vision model on Token Factory (MiniCPM-V 4.5) reads it, adds each part to the job at cost, books the receipt as a parts expense with its GST, and reads back the new total |
 | Says *"The CX-5 is waiting on parts till Thursday"* | Texts that customer, so fewer people walk in to ask |
 | Taps Paid EFTPOS, or says *"Corolla paid on EFTPOS"* | Marks the invoice paid with the method and texts the receipt |
 | Says *"need front pads for the Mazda"* | Finds the price (shop catalogue plus Tavily live search) and drafts a parts order that waits for approval |
 
-The model never sets a price: prices come from the catalogue and the labour rate, or from what he said or wrote.
+The model never invents a price. The amounts he says are the charge; anything he leaves out comes from the shop's labour rate and parts list, and the read-back lets him correct it by just saying it again.
 
 ### For his wife: a link in a text
 
@@ -46,7 +48,7 @@ When he taps Send she gets a text with a signed link (`/approve/:id`). She sees 
 
 ### Bookings from the shop's own website
 
-Bookings made on the shop's website flow onto the board, and a job card opens prefilled with customer, phone, car, rego and booked service, so he only says what was different. Marking a booking completed on the site starts an invoice draft, which still goes through his wife's approval. GarageDesk only reads from the site. See [docs/BOOKING_SITE_LINK.md](docs/BOOKING_SITE_LINK.md); the demo uses a mock week of bookings until the site exposes its read endpoint.
+Bookings made on the shop's website flow onto the board, and a job opens prefilled with customer, phone, car, rego and booked service, so he only says what was different. Marking a booking completed on the site starts an invoice draft, which still goes through his wife's approval. GarageDesk only reads from the site. See [docs/BOOKING_SITE_LINK.md](docs/BOOKING_SITE_LINK.md); the demo uses a mock week of bookings until the site exposes its read endpoint.
 
 ### For customers
 
@@ -58,14 +60,13 @@ Bookings made on the shop's website flow onto the board, and a job card opens pr
 |---|---|
 | Owner iPhone app, hold-to-talk, read-back | Built |
 | Talk-to-Invoice | Built |
-| Job card photo to invoice | Built |
+| Supplier receipt photo adds parts and books the expense | Built |
 | Wife approves or fixes from a text link | Built |
 | "Car is ready" and status texts | Built |
 | Paid on EFTPOS with receipt text | Built |
 | Prefill jobs from the shop's booking website | Built (mock bookings until the site exposes its read endpoint) |
 | Phone, SMS and web chat front desk; parts lookup and orders; daily report | Built |
 | Quarterly GST summary for the BAS, CSV export | Next |
-| Supplier receipt photos to expenses | Next |
 
 ### Nemotron tiers, each where it earns its keep
 
@@ -112,11 +113,11 @@ Phone calls and SMS: point a Twilio number's voice webhook at `POST /twilio/voic
 ## Architecture
 
 ```
-owner ──iPhone: voice / job card photo──▶ owner app ──┐
+owner ──iPhone: voice / receipt photo────▶ owner app ──┐
 wife ───text link: Approve / Fix────────▶ approvals ──┤      ┌─ Nemotron Nano  (classify, extract)
 customer ─phone/SMS/web chat────────────▶ front desk ─┼─▶ agent runner ──▶ Nemotron Super (invoice lines, tool calls)
 scheduler ─4pm / 5:45pm─────────────────▶ reminders ──┘      ├─ Nemotron Ultra (daily report)
-                                                 │           └─ vision model   (read job card photos)
+                                                 │           └─ vision model   (read receipt photos)  
                          tools: bookings, jobs, GST invoices (PDF), payments, parts lookup
                                 (Tavily + catalogue), purchase orders, approvals, outbox
                                                  │

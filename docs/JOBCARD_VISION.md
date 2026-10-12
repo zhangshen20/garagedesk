@@ -1,7 +1,11 @@
 # Job card photo to job draft
 
-The owner writes job cards on paper and doesn't type. He takes a photo of the card with
-his iPhone and GarageDesk turns it into a job draft that is ready to invoice. Each field
+> **Optional.** The real owner turned out not to use paper job cards, so the owner app no
+> longer links to this; his flow is voice plus "Add parts from a receipt photo". The
+> endpoints below stay for shops that do write job cards, and for the dashboard.
+
+A shop that writes job cards on paper can photograph a card and GarageDesk turns it into
+a job draft that is ready to invoice. Each field
 comes with a confidence score, so the app only reads back the parts it isn't sure about.
 
 ## Pipeline

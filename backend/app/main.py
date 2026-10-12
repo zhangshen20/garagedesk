@@ -93,6 +93,9 @@ if os.path.isdir(STATIC_DIR):
     @app.get("/{full_path:path}")
     def spa(full_path: str) -> FileResponse:
         candidate = os.path.join(STATIC_DIR, full_path)
+        # hashed bundles live under /assets; everything else must be re-checked so
+        # a phone never keeps an old page after a deploy
+        no_cache = {"Cache-Control": "no-cache"}
         if full_path and os.path.isfile(candidate):
-            return FileResponse(candidate)
-        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+            return FileResponse(candidate, headers=no_cache)
+        return FileResponse(os.path.join(STATIC_DIR, "index.html"), headers=no_cache)

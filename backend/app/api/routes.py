@@ -9,7 +9,7 @@ from collections import deque
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -18,6 +18,7 @@ from .. import services as svc
 from ..agent.backoffice import handle_owner_message
 from ..agent.frontdesk import handle_customer_message
 from ..agent.report import generate_daily_report
+from ..agent.stt import available as stt_available
 from ..config import get_settings
 from ..db import get_session
 from ..models import (
@@ -122,6 +123,32 @@ def owner_diag_list() -> list[dict[str, Any]]:
     return list(_DIAG)[-150:]
 
 
+@router.post("/owner/audio")
+def owner_audio(audio: UploadFile = File(...), s: Session = Depends(get_session)) -> dict[str, Any]:
+    """What he said, recorded on the phone; transcribed here, then handled like dictation."""
+    from ..agent.owner_app import handle_voice
+    from ..agent.stt import transcribe
+
+    data = audio.file.read()
+    if len(data) > 15_000_000:
+        raise HTTPException(413, "recording too long")
+    if len(data) < 800:
+        raise HTTPException(400, "nothing heard")
+    try:
+        text = transcribe(data)
+    except RuntimeError as e:
+        raise HTTPException(503, str(e)) from None
+    except Exception:
+        _diag_log.exception("transcribe failed")
+        raise HTTPException(422, "couldn't hear that recording") from None
+    _diag_log.info("owner audio %d bytes -> %r", len(data), text[:200])
+    if not text:
+        raise HTTPException(400, "nothing heard")
+    r = handle_voice(s, text)
+    s.commit()
+    return {**r, "transcript": r.get("transcript") or text, "heard": text}
+
+
 class PhotoIn(BaseModel):
     image_b64: str
     mime: str = "image/jpeg"
@@ -160,6 +187,7 @@ def owner_today(s: Session = Depends(get_session)) -> dict[str, Any]:
         "shop": settings.shop_trading_name,
         "owner": settings.owner_name,
         "approver": settings.approver_name,
+        "stt": stt_available(),
         "jobs": [_owner_job_view(s, j) for j in jobs],
         "arriving": [svc.booking_view(s, b) for b in waiting if not s.exec(select(Job).where(Job.booking_id == b.id)).first()],
     }

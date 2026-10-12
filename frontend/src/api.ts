@@ -265,10 +265,12 @@ export interface OwnerResult {
   transcript?: string;
   paid_method?: string;
   model?: string;
+  heard?: string;
 }
 
 export interface OwnerToday {
   shop: string;
+  stt?: boolean;
   owner: string;
   approver: string;
   jobs: OwnerJob[];
@@ -326,6 +328,21 @@ export const api = {
 
   ownerVoice: (text: string) => post<OwnerResult>("/api/owner/voice", { text }),
   ownerPhoto: (image_b64: string, mime = "image/jpeg") => post<OwnerResult>("/api/jobcards/scan", { image_b64, mime }),
+  ownerAudio: async (audio: Blob): Promise<OwnerResult> => {
+    const form = new FormData();
+    form.append("audio", audio, audio.type.includes("webm") ? "talk.webm" : "talk.m4a");
+    const res = await fetch("/api/owner/audio", { method: "POST", body: form });
+    if (!res.ok) {
+      let detail = res.statusText;
+      try {
+        detail = (await res.json())?.detail ?? detail;
+      } catch {
+        /* non-JSON */
+      }
+      throw new ApiError(res.status, String(detail));
+    }
+    return (await res.json()) as OwnerResult;
+  },
   ownerReceipt: (jobId: number, image_b64: string, mime = "image/jpeg") => post<OwnerResult>(`/api/owner/jobs/${jobId}/receipt`, { image_b64, mime }),
   ownerToday: () => get<OwnerToday>("/api/owner/today"),
   ownerSend: (jobId: number) => post<SendResult>(`/api/owner/jobs/${jobId}/send`),

@@ -1,6 +1,6 @@
-"""Read-only link to the shop's own website booking system (Sunshine North Mechanic).
+"""Read-only link to the shop's own website booking system (the demo shop, Sunshine Auto Care).
 
-The website (Cloudflare Worker + D1, repo zhangshen20/sunshine-auto-care) is the
+The website (Cloudflare Worker + D1) is the
 source of truth for customer bookings. GarageDesk only reads from it:
 
 * ``source``  pulls bookings from the site (or a mock for tests and the demo)

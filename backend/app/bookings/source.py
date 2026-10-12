@@ -43,7 +43,7 @@ class SiteLinkSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # Base URL of the website, e.g. https://www.sunshinenthmechanic.com.au
+    # Base URL of the website, e.g. https://www.example-workshop.com.au
     site_bookings_url: str = ""
     # Bearer token the site checks on GET /integrations/garagedesk/bookings
     site_bookings_token: str = ""
@@ -108,7 +108,7 @@ class HttpBookingSource:
 
 
 class MockBookingSource:
-    """A believable week at Sunshine North Mechanic, relative to ``today``.
+    """A believable week at Sunshine Auto Care, relative to ``today``.
 
     State is kept in memory so the demo can flip a booking to "completed" and
     watch the invoice draft appear, exactly as the real webhook would.

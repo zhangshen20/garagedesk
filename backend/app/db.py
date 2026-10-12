@@ -34,6 +34,25 @@ def init_db() -> None:
     from . import models  # noqa: F401  ensure tables are registered
 
     SQLModel.metadata.create_all(get_engine())
+    _add_missing_columns()
+
+
+def _add_missing_columns() -> None:
+    """create_all makes new tables but never new columns on an existing one. Add any
+    nullable column the model has and the database lacks, so a deploy doesn't need the
+    demo data wiped first."""
+    from sqlalchemy import inspect, text
+
+    engine = get_engine()
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table in SQLModel.metadata.sorted_tables:
+            if not insp.has_table(table.name):
+                continue
+            have = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name not in have and col.nullable:
+                    conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {col.type.compile(engine.dialect)}'))
 
 
 @contextmanager

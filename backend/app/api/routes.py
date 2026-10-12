@@ -3,11 +3,13 @@ the demo scripts both use it."""
 
 from __future__ import annotations
 
+import logging
 import os
+from collections import deque
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -88,6 +90,36 @@ def owner_voice(body: VoiceIn, s: Session = Depends(get_session)) -> dict[str, A
     r = handle_voice(s, body.text.strip())
     s.commit()
     return r
+
+
+# What the owner's phone reports about its microphone (speech API present, Home
+# Screen mode, permission, errors), so a "the button doesn't record" report can
+# be checked against what the phone actually did. Kept in memory and logged.
+_DIAG: deque[dict[str, Any]] = deque(maxlen=300)
+_diag_log = logging.getLogger("garagedesk.owner_diag")
+
+
+class DiagIn(BaseModel):
+    event: str
+    detail: dict[str, Any] = {}
+
+
+@router.post("/owner/diag")
+def owner_diag(body: DiagIn, request: Request) -> dict[str, bool]:
+    entry = {
+        "at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "event": body.event[:60],
+        "detail": {str(k)[:40]: str(v)[:300] for k, v in list(body.detail.items())[:25]},
+        "ua": request.headers.get("user-agent", "")[:200],
+    }
+    _DIAG.append(entry)
+    _diag_log.info("owner diag %s", entry)
+    return {"ok": True}
+
+
+@router.get("/owner/diag")
+def owner_diag_list() -> list[dict[str, Any]]:
+    return list(_DIAG)[-150:]
 
 
 class PhotoIn(BaseModel):

@@ -145,3 +145,10 @@ def test_receipt_photo_adds_parts_and_books_the_expense(client):
     assert "Added" in r["readback"]
     exp = client.get("/api/money").json()["summary"]
     assert exp["cash_out_cents"] >= 9460
+
+
+def test_phone_mic_report_is_kept(client):
+    r = client.post("/api/owner/diag", json={"event": "error", "detail": {"code": "not-allowed", "by": "press"}}, headers={"user-agent": "iPhone test"})
+    assert r.status_code == 200
+    last = client.get("/api/owner/diag").json()[-1]
+    assert last["event"] == "error" and last["detail"]["code"] == "not-allowed" and last["ua"] == "iPhone test"

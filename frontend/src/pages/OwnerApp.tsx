@@ -23,6 +23,7 @@ type Recognition = {
   abort: () => void;
   onresult: ((e: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null;
   onend: (() => void) | null;
+  onstart: (() => void) | null;
   onerror: ((e: { error: string }) => void) | null;
 };
 
@@ -35,6 +36,25 @@ function makeRecognition(): Recognition | null {
   r.continuous = true;
   r.interimResults = true;
   return r;
+}
+
+/** Tell the server what the phone's microphone did. Fire and forget. */
+function diag(event: string, detail: Record<string, unknown> = {}) {
+  try {
+    void fetch("/api/owner/diag", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event, detail }),
+      keepalive: true,
+    }).catch(() => undefined);
+  } catch {
+    /* never let reporting break the page */
+  }
+}
+
+function standalone(): boolean {
+  const n = navigator as Navigator & { standalone?: boolean };
+  return Boolean(n.standalone) || window.matchMedia?.("(display-mode: standalone)").matches;
 }
 
 function plain(text: string): string {
@@ -64,23 +84,28 @@ function micProblem(code: string): string {
 }
 
 const TYPE_KEY = "garagedesk.owner.type";
+// Some iPhones only start the microphone on a finished tap, not on a press.
+const PRESS_KEY = "garagedesk.owner.pressfails";
 
-function prefersTyping(): boolean {
+function flag(key: string): boolean {
   try {
-    return localStorage.getItem(TYPE_KEY) === "1";
+    return localStorage.getItem(key) === "1";
   } catch {
     return false;
   }
 }
 
-function rememberTyping(on: boolean) {
+function setFlag(key: string, on: boolean) {
   try {
-    if (on) localStorage.setItem(TYPE_KEY, "1");
-    else localStorage.removeItem(TYPE_KEY);
+    if (on) localStorage.setItem(key, "1");
+    else localStorage.removeItem(key);
   } catch {
     /* private mode: just this visit */
   }
 }
+
+const prefersTyping = () => flag(TYPE_KEY);
+const rememberTyping = (on: boolean) => setFlag(TYPE_KEY, on);
 
 /** iOS only lets a page speak after a tap; say nothing once inside the first tap. */
 function unlockSpeech() {
@@ -132,6 +157,14 @@ export default function OwnerApp() {
   const [typing, setTyping] = useState<boolean>(() => !canListen.current || prefersTyping());
   const [micNote, setMicNote] = useState("");
   const errRef = useRef("");
+  const [pressing, setPressing] = useState(false);
+  const phaseRef = useRef<Phase>("idle");
+  phaseRef.current = phase;
+  const pressAt = useRef(0);
+  const startedBy = useRef<"press" | "tap">("tap");
+  const startedOk = useRef(false);
+  const stopOnTap = useRef(false);
+  const pressFails = useRef(flag(PRESS_KEY));
 
   const refresh = useCallback(() => {
     api.ownerToday().then(setToday).catch(() => undefined);
@@ -139,6 +172,21 @@ export default function OwnerApp() {
 
   useEffect(() => {
     document.title = "GarageDesk · Owner";
+    const w = window as unknown as Record<string, unknown>;
+    const report = (mic: string) =>
+      diag("open", {
+        speech: Boolean(w.SpeechRecognition),
+        webkitSpeech: Boolean(w.webkitSpeechRecognition),
+        secure: window.isSecureContext,
+        standalone: standalone(),
+        mic,
+        pressFails: pressFails.current,
+        typing: prefersTyping(),
+        build: document.querySelector<HTMLScriptElement>("script[src*='assets/']")?.src.split("/").pop() ?? "",
+      });
+    const perms = (navigator as Navigator & { permissions?: { query: (d: { name: string }) => Promise<{ state: string }> } }).permissions;
+    if (perms) perms.query({ name: "microphone" }).then((p) => report(p.state), () => report("unknown"));
+    else report("no-permissions-api");
     refresh();
     const t = setInterval(refresh, 10000);
     return () => clearInterval(t);
@@ -171,18 +219,25 @@ export default function OwnerApp() {
     }
   }
 
-  function startListening() {
+  function startListening(by: "press" | "tap") {
     window.speechSynthesis?.cancel();
     const rec = makeRecognition();
     if (!rec) {
+      diag("no-speech-api");
       setTyping(true);
       return;
     }
     finalRef.current = "";
     errRef.current = "";
+    startedBy.current = by;
+    startedOk.current = false;
     setHeard("");
     setMicNote("");
     setResult(null);
+    rec.onstart = () => {
+      startedOk.current = true;
+      diag("started", { by });
+    };
     rec.onresult = (e) => {
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -194,17 +249,25 @@ export default function OwnerApp() {
     };
     rec.onerror = (e) => {
       errRef.current = e.error;
+      diag("error", { code: e.error, by, started: startedOk.current });
     };
     rec.onend = () => {
       recRef.current = null;
       const said = finalRef.current.trim();
       const err = errRef.current;
+      diag("end", { by, words: said.split(/\s+/).filter(Boolean).length, err, started: startedOk.current });
       if (said) {
         void submitText(said);
         return;
       }
       setPhase("idle");
-      if (err && err !== "aborted") {
+      const blocked = err === "not-allowed" || err === "service-not-allowed";
+      if (blocked && by === "press") {
+        // this phone wants a finished tap: from now on start on the tap
+        pressFails.current = true;
+        setFlag(PRESS_KEY, true);
+        setMicNote("Tap the button once, then talk. Tap again when you're done.");
+      } else if (err && err !== "aborted") {
         setMicNote(micProblem(err));
         if (err !== "no-speech") {
           setTyping(true);
@@ -218,11 +281,18 @@ export default function OwnerApp() {
     setPhase("listening");
     try {
       rec.start();
-    } catch {
+      diag("start", { by });
+    } catch (err) {
       recRef.current = null;
       setPhase("idle");
-      setMicNote(micProblem(""));
-      setTyping(true);
+      diag("start-threw", { by, message: String(err) });
+      if (by === "press") {
+        pressFails.current = true;
+        setFlag(PRESS_KEY, true);
+      } else {
+        setMicNote(micProblem(""));
+        setTyping(true);
+      }
     }
   }
 
@@ -233,9 +303,38 @@ export default function OwnerApp() {
     if (rec) setTimeout(() => rec.stop(), 300);
   }
 
-  function onTalk() {
-    if (phase === "listening") stopListening();
-    else if (phase === "idle") startListening();
+  // Hold to talk and tap to talk both work. A press starts listening straight
+  // away where the phone allows it; letting go after a real hold sends it. A
+  // quick tap keeps listening until the next tap. Phones that only allow the
+  // microphone on a finished tap start on the tap instead.
+  function onPressStart(e: React.PointerEvent) {
+    e.preventDefault();
+    if (phaseRef.current === "listening") {
+      stopOnTap.current = true;
+      return;
+    }
+    if (phaseRef.current !== "idle") return;
+    pressAt.current = Date.now();
+    setPressing(true);
+    if (!pressFails.current) startListening("press");
+  }
+
+  function onPressEnd() {
+    setPressing(false);
+    const held = Date.now() - pressAt.current;
+    if (recRef.current && startedBy.current === "press" && held > 700 && !stopOnTap.current) {
+      pressAt.current = 0;
+      stopListening();
+    }
+  }
+
+  function onTap() {
+    if (stopOnTap.current) {
+      stopOnTap.current = false;
+      stopListening();
+      return;
+    }
+    if (phaseRef.current === "idle" && !recRef.current) startListening("tap");
   }
 
   async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -315,17 +414,22 @@ export default function OwnerApp() {
             <button
               type="button"
               aria-label={phase === "listening" ? "Stop and send" : "Tap to talk"}
-              onClick={onTalk}
+              onPointerDown={onPressStart}
+              onPointerUp={onPressEnd}
+              onClick={onTap}
               onContextMenu={(e) => e.preventDefault()}
               disabled={phase === "thinking"}
-              className={`relative grid h-56 w-56 touch-manipulation select-none place-items-center rounded-full text-white shadow-float transition [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none] ${
-                phase === "listening" ? "scale-105 bg-red-600" : phase === "thinking" ? "bg-slate-700" : "bg-brand-600 active:scale-95"
+              className={`relative grid h-56 w-56 touch-none select-none place-items-center rounded-full text-white shadow-float transition [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none] ${
+                phase === "listening" ? "scale-105 bg-red-600" : phase === "thinking" ? "bg-slate-700" : pressing ? "scale-95 bg-brand-700" : "bg-brand-600"
               }`}
             >
               {phase === "listening" && <span className="absolute inset-0 animate-ping rounded-full bg-red-500/40" />}
               <span className="relative flex flex-col items-center gap-2">
                 {phase === "thinking" ? <Loader2 size={64} className="animate-spin" /> : phase === "listening" ? <Square size={56} fill="currentColor" /> : <Mic size={72} />}
-                <span className="text-lg font-semibold">{phase === "listening" ? "Listening… tap when done" : phase === "thinking" ? "Working…" : "Tap to talk"}</span>
+                <span className="px-6 text-center text-lg font-semibold leading-tight">
+                  {phase === "listening" ? "Listening… talk now" : phase === "thinking" ? "Working…" : pressing ? "Let go, then talk" : "Tap to talk"}
+                </span>
+                {phase === "listening" && <span className="text-sm text-red-100">Tap or let go when done</span>}
               </span>
             </button>
           ) : (

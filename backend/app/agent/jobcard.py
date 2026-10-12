@@ -270,14 +270,20 @@ def readback(view: dict[str, Any], warnings: list[str]) -> str:
 
 def draft_from_text(s: Session, text: str, transcript_model: str = "") -> Draft:
     ex, model = extract(text)
+    return draft_from_extracted(s, ex, text, " + ".join(m for m in (transcript_model, model) if m))
+
+
+def draft_from_extracted(s: Session, ex: dict[str, Any], transcript: str = "", model: str = "") -> Draft:
+    """Find the job, price it and build the read-back from an already extracted dict.
+    Other readers (the hardened photo reader, booking prefill) enter here."""
     if not ex:
-        return Draft(ok=False, readback="Sorry, I didn't get that. Try again: say the car, what you did, and how long it took.", transcript=text, model=model)
+        return Draft(ok=False, readback="Sorry, I didn't get that. Try again: say the car, what you did, and how long it took.", transcript=transcript, model=model)
     job = find_or_open_job(s, ex)
     if not job:
         car = ex.get("car") or "that car"
-        return Draft(ok=False, readback=f"I couldn't find {car} in today's jobs. Say the rego and the customer's name.", transcript=text, extracted=ex, model=model)
+        return Draft(ok=False, readback=f"I couldn't find {car} in today's jobs. Say the rego and the customer's name.", transcript=transcript, extracted=ex, model=model)
     if job.status in (JobStatus.invoiced, JobStatus.paid):
-        return Draft(ok=False, readback="That job is already invoiced.", transcript=text, extracted=ex, model=model)
+        return Draft(ok=False, readback="That job is already invoiced.", transcript=transcript, extracted=ex, model=model)
     warnings = apply_to_job(s, job, ex)
     view = svc.job_view(s, job)
     paid = str(ex.get("paid_method") or "").lower()
@@ -286,8 +292,8 @@ def draft_from_text(s: Session, text: str, transcript_model: str = "") -> Draft:
         job=view,
         readback=readback(view, warnings),
         warnings=warnings,
-        transcript=text,
+        transcript=transcript,
         extracted=ex,
         paid_method=paid if paid in ("eftpos", "cash", "transfer") else "",
-        model=" + ".join(m for m in (transcript_model, model) if m),
+        model=model,
     )

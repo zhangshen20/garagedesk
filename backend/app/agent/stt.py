@@ -52,7 +52,7 @@ def _model():
     return WhisperModel(s.stt_model, device="cpu", compute_type="int8")
 
 
-def transcribe(audio: bytes) -> str:
+def transcribe(audio: bytes, extra_hint: str = "") -> str:
     if _mock():
         return MOCK_TRANSCRIPT
     try:
@@ -61,7 +61,7 @@ def transcribe(audio: bytes) -> str:
         raise RuntimeError("speech to text is not installed on this server") from None
     with _lock:  # one at a time on a small VM
         segments, _ = _model().transcribe(
-            io.BytesIO(audio), language="en", beam_size=1, vad_filter=True, initial_prompt=_HINT
+            io.BytesIO(audio), language="en", beam_size=1, vad_filter=True, initial_prompt=(_HINT + " " + extra_hint).strip()
         )
         return " ".join(seg.text.strip() for seg in segments).strip()
 

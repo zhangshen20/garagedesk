@@ -167,3 +167,12 @@ def test_recorded_speech_becomes_a_draft(client):
 def test_empty_recording_is_refused(client):
     r = client.post("/api/owner/audio", files={"audio": ("talk.m4a", b"\0" * 10, "audio/mp4")})
     assert r.status_code == 400
+
+
+def test_speech_hint_lists_cars_in_the_shop(client):
+    from app.api.routes import _cars_in_shop
+    from app.db import session_scope
+
+    with session_scope() as s:
+        hint = _cars_in_shop(s)
+    assert "ABC123" in hint and "1KR9ZZ" in hint

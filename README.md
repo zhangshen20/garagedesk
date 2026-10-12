@@ -4,7 +4,7 @@
 
 Built for the Nebius x NVIDIA Global AI Hackathon (track: Best Apps & Agents) with a real workshop in Sunshine North, Melbourne. In the app the shop appears as **Sunshine Auto Care**.
 
-> **Live demo:** owner app at https://66-201-4-40.sslip.io/owner (open it on an iPhone), dashboard at https://66-201-4-40.sslip.io/ and customer chat at https://66-201-4-40.sslip.io/chat, on a Nebius AI Cloud VM calling live Nemotron models. Use the HTTPS address on an iPhone: Safari only allows speech recognition on secure pages.
+> **Live demo:** owner app at https://66-201-4-40.sslip.io/owner (open it on a phone, in any browser), dashboard at https://66-201-4-40.sslip.io/ and customer chat at https://66-201-4-40.sslip.io/chat, on a Nebius AI Cloud VM calling live Nemotron models.
 >
 > Demo mode works with **no API keys at all**. Add a Nebius key and the same code runs on live Nemotron models.
 
@@ -19,8 +19,8 @@ GarageDesk takes that exact phone call. He says the same words to his phone inst
 Invoicing software assumes someone sitting at a desk. He will never be that person. So GarageDesk is built around five rules:
 
 1. **Say it the way he'd say it on the phone. Never type.** His own words and his own figures, one big button.
-2. **Works with dirty hands.** One big button you tap with a knuckle: tap to talk, tap when done. No login mid-job.
-3. **His numbers, read back before it leaves.** The amounts he says are the charge. The invoice is read to him in one sentence, and he says yes or no.
+2. **Works with dirty hands.** One big button: hold it and talk, let go to send (or tap to start and tap to stop). No login mid-job.
+3. **His numbers, read back before it leaves.** The amounts he says are the charge. The invoice is read to him in one short breath, and he says yep or says it again.
 4. **His wife stays in control, from anywhere.** She approves every invoice with one tap on her phone.
 5. **It knows the shop already.** Customer, car, rego and booked service come from the booking, so he only says what is different.
 
@@ -30,14 +30,15 @@ Success is one number: admin calls to his wife per day, from several to none.
 
 ### For the owner: `/owner`, a phone web app on his home screen
 
-One huge talk button: tap to talk, and his words appear as he speaks; tap again when done. If the phone won't listen, a link under the button switches to the keyboard microphone. No login, no forms, no app store.
+One huge talk button: hold it and talk, let go to send (a tap to start and a tap to stop works too). The phone records his voice and the server turns it into text, so it works in Chrome, Safari or any phone browser. Replies come back in a natural voice, short by default, and end with the next question so a "yep" does it. No login, no forms, no app store.
 
 | He does | GarageDesk does |
 |---|---|
-| Taps the button and says what he'd tell his wife, then taps again: *"Corolla ABC123, front pads, hour and a half, 350 all up."* | Nemotron 3 Nano routes it in under a second; Nemotron 3 Super turns it into line items as JSON; code finds the job and uses his figures as the charge: a price per item, a labour amount, or a total ("350 all up" puts the balance after parts on the labour line). Only prices he didn't say come from the shop's parts list, and labour from $120 an hour plus GST. The draft is read back out loud: *"Invoice for Maria's Toyota Corolla: labour 219.10 and brake pads front 130.90. 350.00 dollars including GST. Send it?"* He taps Send. |
+| Holds the button and says what he'd tell his wife, then lets go: *"Corolla ABC123, front pads, hour and a half, 350 all up."* | Nemotron 3 Nano routes it in under a second; Nemotron 3 Super turns it into line items as JSON; code finds the job and uses his figures as the charge: a price per item, a labour amount, or a total ("350 all up" puts the balance after parts on the labour line). Only prices he didn't say come from the shop's parts list, and labour from $120 an hour plus GST. The draft is read back out loud: *"Maria's Corolla. Front brake pads and an hour and a half labour. Three hundred and fifty dollars all up. Send it to Jenny?"* He says "yep" and it goes to his wife. "Hear every line" reads each line and the GST. |
+| Says *"Find yesterday's jobs and prepare invoice"* | Nemotron Nano pulls out the day, rego, customer, car or status; code finds the job (Dan's X-Trail, finished yesterday) and the invoice draft is read back: $240.90 all up |
 | Taps "Add parts from a receipt photo" on the draft and photographs the supplier's receipt | A vision model on Token Factory (MiniCPM-V 4.5) reads it, adds each part to the job at cost, books the receipt as a parts expense with its GST, and reads back the new total |
 | Says *"The CX-5 is waiting on parts till Thursday"* | Texts that customer, so fewer people walk in to ask |
-| Taps Paid EFTPOS, or says *"Corolla paid on EFTPOS"* | Marks the invoice paid with the method and texts the receipt |
+| Hears *"Jenny approved Maria's Corolla… Say yes when they've paid on EFTPOS"* and says "yes", taps Paid EFTPOS, or says *"Corolla paid on EFTPOS"* | Marks the invoice paid with the method and texts the receipt |
 | Says *"need front pads for the Mazda"* | Finds the price (shop catalogue plus Tavily live search) and drafts a parts order that waits for approval |
 
 The model never invents a price. The amounts he says are the charge; anything he leaves out comes from the shop's labour rate and parts list, and the read-back lets him correct it by just saying it again.
@@ -58,7 +59,8 @@ Bookings made on the shop's website flow onto the board, and a job opens prefill
 
 | Feature | Status |
 |---|---|
-| Owner iPhone app, tap-to-talk, read-back | Built |
+| Owner phone app, hold to talk in any browser, spoken read-back | Built |
+| Find jobs by day, rego, customer, car or status | Built |
 | Talk-to-Invoice | Built |
 | Supplier receipt photo adds parts and books the expense | Built |
 | Wife approves or fixes from a text link | Built |
@@ -72,11 +74,11 @@ Bookings made on the shop's website flow onto the board, and a job opens prefill
 
 | Tier | Model (Nebius Token Factory id) | Used for |
 |---|---|---|
-| fast | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | Intent classification on every message; extracting prices from web search results |
+| fast | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | Intent classification on every message; pulling the day, car, customer, rego or status out of the owner's words; extracting prices from web search results |
 | main | `nvidia/nemotron-3-super-120b-a12b` | Turning a mechanic's loose words ("pads", "5W-30", "hour and a half") into exact invoice lines; the tool-calling front desk and back office agents |
 | deep | `nvidia/Nemotron-3-Ultra-550b-a55b` | The end-of-day report: reasons over cash, jobs, parts, overdue invoices and tomorrow's board in one pass |
 
-All model calls go through Token Factory's OpenAI-compatible endpoint (`https://api.tokenfactory.nebius.com/v1/`) with native function calling. Swap any tier with `MODEL_FAST`, `MODEL_MAIN`, `MODEL_DEEP`. Token Factory has no speech model, so speech-to-text is the iPhone's own recognition through Safari's Web Speech API (which needs HTTPS; without it the page falls back to the keyboard's dictation button), and Twilio speech recognition on phone calls. Photos are read by a vision model on Token Factory and Nemotron does the reasoning.
+All model calls go through Token Factory's OpenAI-compatible endpoint (`https://api.tokenfactory.nebius.com/v1/`) with native function calling. Swap any tier with `MODEL_FAST`, `MODEL_MAIN`, `MODEL_DEEP`. Token Factory has no speech models, so two small open models run on the same Nebius VM: faster-whisper (base.en, int8) transcribes the owner's recordings (`POST /api/owner/audio`), hinted with the cars and regos in the shop, and Kokoro 82M (Apache-2.0) speaks the replies (`GET /api/tts`). Safari's own speech recognition and the browser's voice are fallbacks. Twilio speech recognition handles phone calls. Photos are read by a vision model on Token Factory and Nemotron does the reasoning.
 
 ### Safety rails that make it usable for a real business
 
@@ -127,6 +129,8 @@ scheduler ─4pm / 5:45pm─────────────────▶ 
 - `backend/app/llm.py`: Token Factory client plus a deterministic mock that drives the same tools, so tests and the keyless demo exercise the real loop.
 - `backend/app/agent/tools.py`: the agent tools, schema and implementation side by side.
 - `backend/app/agent/frontdesk.py`, `backoffice.py`, `report.py`: the agents and their prompts.
+- `backend/app/agent/joblookup.py`: finds jobs by day, rego, customer, car or status. `backend/tests/owner_utterances.py` holds 47 real owner phrasings run on every PR; `backend/scripts/owner_eval_live.py` runs them on live Nemotron.
+- `backend/app/voice/`: the short spoken read-back and the "yep" that answers the last question; `backend/app/agent/stt.py` and `backend/app/voice/tts.py` for speech.
 - `backend/app/services.py`: bookings, bays, GST, invoices, purchase orders, approvals. No LLM calls.
 - `frontend/`: Vite + React + Tailwind, built into `backend/static` and served by FastAPI.
 

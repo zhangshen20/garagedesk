@@ -44,7 +44,7 @@ Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 "Maria knows her car is ready before she walks in, and she gets a proper Australian tax invoice. She pays on the EFTPOS terminal, he taps Paid, and the receipt goes out. The shop has no accounting software, and now it doesn't need any."
 
 ## 2:15–2:35  The rest of his day
-*Hold the button: "The CX-5 is waiting on parts till Thursday." Show that customer's text. Then a fast montage, 3 seconds each: a customer booking a service in the web chat; "need front pads for the Mazda" turning into a parts order with a Tavily-found price waiting on Approvals; the Nemotron 3 Ultra end-of-day report.*
+*Hold the button: "The CX-5 will be ready tomorrow afternoon." Show that customer's text. Then a fast montage, 3 seconds each: a customer booking a service in the web chat; "need front pads for the Mazda" turning into a parts order with a Tavily-found price waiting on Approvals; the Nemotron 3 Ultra end-of-day report.*
 
 "Status updates text the customer, so nobody needs to come in and ask. And behind that one button is a whole back office: a front desk that answers customers and books cars, parts prices searched live with Tavily, and an end-of-day report written by Nemotron 3 Ultra."
 
@@ -63,7 +63,7 @@ Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 | 4 | Text arrives, approve page with GST, tap "Approve and send" | Second phone |
 | 5 | "Your car is ready" text and the invoice PDF | Outbox, phone-sized window |
 | 6 | Paid EFTPOS tap and receipt text | Owner app, then Outbox |
-| 7 | "CX-5 waiting on parts" by voice, customer text | Owner app, then Outbox |
+| 7 | "CX-5 ready tomorrow" by voice, customer text | Owner app, then Outbox |
 | 8 | Customer booking in the web chat | /chat |
 | 9 | Parts order with a Tavily price waiting on Approvals | Dashboard |
 | 10 | Ultra end-of-day report | Dashboard, Report page |

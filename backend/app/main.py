@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api.routes import router as api_router
+from .bookings.router import router as site_bookings_router
 from .channels.twilio import router as twilio_router
 from .config import get_settings
 from .db import init_db, session_scope
@@ -75,6 +76,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="GarageDesk", version="0.1.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(api_router)
+app.include_router(site_bookings_router)
 app.include_router(twilio_router)
 
 

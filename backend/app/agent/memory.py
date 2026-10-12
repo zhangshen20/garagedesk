@@ -25,6 +25,8 @@ from sqlmodel import Session, select
 from .. import services as svc
 from ..config import get_settings
 from ..models import (
+    Booking,
+    BookingStatus,
     Channel,
     Conversation,
     Customer,
@@ -46,7 +48,7 @@ HISTORY_VISITS = 3
 
 # Short confirmations after "Send it?": the whole utterance, nothing more.
 _SEND_IT = re.compile(
-    r"^(?:(?:yes|yep|yeah|yup|ok|okay|sure|righto|sweet|perfect|correct|that's right|thats right|all good)[\s,.!]*)*"
+    r"^(?:(?:yes|yep|yeah|yup|ok|okay|sure|righto|good|sweet|perfect|correct|that's right|thats right|all good)[\s,.!]*)*"
     r"(?:(?:please\s+)?(?:send(?: it| that| that one| it off| it through| it to her| it to (?:the )?(?:wife|missus))?|go ahead|do it|go for it|approve it)[\s,.!]*(?:please|mate|thanks)?[\s,.!]*)?$",
     re.IGNORECASE,
 )
@@ -113,7 +115,8 @@ def remember_turn(s: Session, said: str, out: dict[str, Any]) -> OwnerTurn:
     outcome = str(out.get("readback") or "")
     kind = str(out.get("kind") or "reply")
     ready = kind == "draft" and bool(out.get("ok")) and not out.get("warnings")
-    t = OwnerTurn(said=said, kind=kind, outcome=outcome[:600], ready=ready, job_id=job.id if job else None, customer_id=job.customer_id if job else None)
+    described = str(out.get("described") or said) if kind == "draft" else ""
+    t = OwnerTurn(said=said, kind=kind, outcome=outcome[:600], ready=ready, described=described[:1000], job_id=job.id if job else None, customer_id=job.customer_id if job else None)
     s.add(t)
     if t.kind != "reply":
         conv = owner_conversation(s)
@@ -135,6 +138,27 @@ def focus_job(s: Session) -> Job | None:
     since = datetime.utcnow() - timedelta(hours=FOCUS_HOURS)
     t = s.exec(select(OwnerTurn).where(OwnerTurn.created_at >= since, OwnerTurn.job_id != None).order_by(OwnerTurn.id.desc())).first()  # type: ignore[attr-defined]  # noqa: E711
     return s.get(Job, t.job_id) if t and t.job_id else None
+
+
+_AMEND = re.compile(r"^\s*(?:(?:actually|no|nah|sorry|oh|and|also|plus|wait|hang on|mate)[\s,.!]+)*(?:make it|make that|change|add|put|take off|take out|remove|drop|forget|it was|labour was|that was|charge (?:her|him|them|it))\b", re.I)
+
+
+def amend_text(s: Session, text: str) -> str | None:
+    """"Make it 380 all up" or "add wipers to that" straight after a draft: his earlier
+    description plus the change, so nothing he already said is lost when the job's lines
+    are rewritten. None when it isn't a correction to the job he's on."""
+    if not _AMEND.search(text):
+        return None
+    last = recent_turns(s, 1)
+    focus = focus_job(s)
+    if not last or not focus or last[-1].kind != "draft" or last[-1].job_id != focus.id or not last[-1].described:
+        return None
+    others = [v for _, v in mentioned(s, text) if v and v.id != focus.vehicle_id]
+    fv = s.get(Vehicle, focus.vehicle_id) if focus.vehicle_id else None
+    other_cars = [c for c in knowhow.cars_in(text) if not fv or _compact(fv.model) not in _compact(c)]
+    if others or other_cars or "waiting" in text.lower():
+        return None
+    return f"{last[-1].described}\nThen he corrected it: {text}"
 
 
 def is_send_it(text: str) -> bool:
@@ -218,8 +242,9 @@ def _visit_day(s: Session, j: Job) -> str:
     return _local(when).strftime("%d %b %Y")
 
 
-def car_story(s: Session, c: Customer, v: Vehicle | None) -> str:
-    """What the shop's records say about this customer and car, for the model to lean on."""
+def car_story(s: Session, c: Customer, v: Vehicle | None, *, current_amounts: bool = True) -> str:
+    """What the shop's records say about this customer and car, for the model to lean on.
+    current_amounts=False leaves the open job's lines out (the extractor would copy them)."""
     car = f"{v.year or ''} {v.make} {v.model} {v.rego}".strip() if v else "car not on file"
     head = f"{c.name}, {car}" + (f", {v.odometer_km:,} km last time" if v and v.odometer_km else "")
     q = select(Job).where(Job.customer_id == c.id)
@@ -229,9 +254,15 @@ def car_story(s: Session, c: Customer, v: Vehicle | None) -> str:
     lines = [head + "."]
     current = [j for j in jobs if j.status not in (JobStatus.invoiced, JobStatus.paid)]
     done = [j for j in jobs if j.status in (JobStatus.invoiced, JobStatus.paid)]
+    bq = select(Booking).where(Booking.customer_id == c.id, Booking.day >= svc.today(), Booking.status.in_([BookingStatus.requested, BookingStatus.confirmed, BookingStatus.checked_in]))  # type: ignore[attr-defined]
+    for b in s.exec(bq.order_by(Booking.day, Booking.start)).all()[:2]:
+        days = (b.day - svc.today()).days
+        day = "today" if days == 0 else "tomorrow" if days == 1 else b.day.strftime("%A %d %B")
+        lines.append(f"  Booked in {day} at {b.start.strftime('%H:%M')}: {b.service} ({b.status.value.replace('_', ' ')}).")
     for j in current[:2]:
         view = svc.job_view(s, j)
-        lines.append(f"  In the shop now: job {j.id} '{j.title}', {j.status.value.replace('_', ' ')}; {_lines_said(view)}; total {_dollars(view['total_cents'])} inc GST.")
+        now = f"  In the shop now: job {j.id} '{j.title}', {j.status.value.replace('_', ' ')}"
+        lines.append(now + (f"; {_lines_said(view)}; total {_dollars(view['total_cents'])} inc GST." if current_amounts else "."))
     for j in done[:HISTORY_VISITS]:
         view = svc.job_view(s, j)
         paid = "paid" if j.status == JobStatus.paid else "invoiced, not paid yet"
@@ -265,10 +296,24 @@ def recall(s: Session, about: str) -> dict[str, Any]:
     return {"found": True, "records": [car_story(s, c, v) for c, v in hits], "shop_notes": shop}
 
 
+def route_context(s: Session) -> str:
+    """Just the last exchange, for the quick intent router (a long prompt slows it and
+    pulls it towards whatever the context talks about)."""
+    last = recent_turns(s, 1)
+    if not last:
+        return ""
+    t = last[-1]
+    return f"Just before this he said \"{t.said[:160]}\" and you replied \"{t.outcome[:160]}\"."
+
+
 # --- the block every owner-facing prompt gets ---------------------------------------------
 
 
-def owner_context(s: Session, text: str) -> str:
+def owner_context(s: Session, text: str, *, for_extract: bool = False) -> str:
+    """for_extract: the version for turning his words into invoice lines. It carries his
+    own words but not our read-backs or the open job's amounts, which the model would
+    otherwise copy as if he had said them; past visits keep their amounts for
+    "same as last time"."""
     today = svc.today()
     yday = today - timedelta(days=1)
     parts = [f"Today is {today.strftime('%A %d %B %Y')}; yesterday was {yday.strftime('%A %d %B')}."]
@@ -279,7 +324,8 @@ def owner_context(s: Session, text: str) -> str:
         for t in turns:
             said = t.said if len(t.said) <= 160 else t.said[:157] + "..."
             got = t.outcome if len(t.outcome) <= 180 else t.outcome[:177] + "..."
-            rows.append(f"- {_when(t.created_at)} he said \"{said}\" -> you: \"{got}\"" + (f" (job {t.job_id})" if t.job_id else ""))
+            reply = "" if for_extract else f" -> you: \"{got}\""
+            rows.append(f"- {_when(t.created_at)} he said \"{said}\"{reply}" + (f" (job {t.job_id})" if t.job_id else ""))
         parts.append("What he said to you lately, oldest first:\n" + "\n".join(rows))
 
     focus = focus_job(s)
@@ -287,7 +333,8 @@ def owner_context(s: Session, text: str) -> str:
         view = svc.job_view(s, focus)
         parts.append(
             f"The job he is on now (what \"it\", \"that one\" or \"send it\" mean): job {focus.id}, {view['customer']}'s {view['vehicle']}, "
-            f"{focus.status.value.replace('_', ' ')}; {_lines_said(view)}; total {_dollars(view['total_cents'])} inc GST."
+            f"{focus.status.value.replace('_', ' ')}"
+            + ("." if for_extract else f"; {_lines_said(view)}; total {_dollars(view['total_cents'])} inc GST.")
         )
 
     cars = mentioned(s, text)
@@ -297,7 +344,7 @@ def owner_context(s: Session, text: str) -> str:
         if c:
             cars = [(c, v)]
     if cars:
-        parts.append("Shop records for the customers and cars he mentioned:\n" + "\n".join(car_story(s, c, v) for c, v in cars))
+        parts.append("Shop records for the customers and cars he mentioned:\n" + "\n".join(car_story(s, c, v, current_amounts=not for_extract) for c, v in cars))
 
     shop_notes = s.exec(select(OwnerFact).where(OwnerFact.customer_id == None).order_by(OwnerFact.id.desc())).all()[:5]  # noqa: E711
     if shop_notes:
@@ -311,6 +358,7 @@ def owner_context(s: Session, text: str) -> str:
         "How to use this: resolve \"it\", \"that one\", \"same again\" and half-said cars from the lines above. "
         "If he corrects or adds to the job he is on, repeat that job as he first described it (his earlier words above) with his change applied, so nothing he said before is lost. "
         "If he says \"same as last time\", use that visit's items and amounts exactly as listed. "
+        "Amounts in your read-backs and the records are not things he said: never copy them into labour or total figures unless he asks for last time's job again. "
         "Otherwise prices come only from what he says now. Never invent a customer, car, rego or amount that is not in his words or these records."
     )
     return "\n\n".join(parts)

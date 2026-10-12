@@ -285,6 +285,7 @@ class OwnerTurn(SQLModel, table=True):
     kind: str = "reply"  # draft | reply | follow_up
     outcome: str = ""  # what the agent said back
     ready: bool = False  # a clean draft read back, waiting on "send it"
+    described: str = ""  # for drafts: his whole description of the job so far, corrections folded in
     job_id: int | None = Field(default=None, foreign_key="job.id", index=True)
     customer_id: int | None = Field(default=None, foreign_key="customer.id")
     created_at: NaiveDatetime = Field(default_factory=now, index=True)

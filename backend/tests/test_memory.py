@@ -89,3 +89,26 @@ def test_knowhow_understands_shop_talk():
     k = knowhow.knowhow_for("timing belt on the camry")
     assert "water pump" in k and "$" not in k
     assert knowhow.lookup("what's a rwc")["found"]
+
+
+def test_correction_keeps_what_he_said_before(client):
+    from app.agent import memory
+    from app.db import session_scope
+
+    client.post("/api/owner/voice", json={"text": "Corolla ABC123 done, front pads, hour and a half labour"})
+    r = client.post("/api/owner/voice", json={"text": "actually make it 380 all up"}).json()
+    assert r["kind"] == "draft" and r["transcript"] == "actually make it 380 all up"
+    with session_scope() as s:
+        assert memory.amend_text(s, "add wipers to that").startswith("Corolla ABC123 done")
+        assert "380 all up" in memory.amend_text(s, "add wipers to that")
+        assert memory.amend_text(s, "what's on today") is None
+
+
+def test_unpriced_line_is_not_sent(client):
+    from app.agent.tools import run_tool
+    from app.db import session_scope
+
+    d = client.post("/api/owner/voice", json={"text": "CX-5 1KR9ZZ done, replaced the wiper blades and a mystery bracket, half hour labour"}).json()
+    with session_scope() as s:
+        r = run_tool(s, "send_invoice_for_approval", {"job_id": d["job"]["job_id"]})
+    assert "error" in r or all(l["unit_cents"] for l in d["job"]["lines"])

@@ -25,12 +25,12 @@ from .models import (
 # rego, days ago, title, lines (kind, description, qty, unit_cents ex GST), notes
 VISITS: list[tuple[str, int, str, list[tuple[LineKind, str, float, int]], str | None]] = [
     ("ABC123", 182, "Logbook service", [
-        (LineKind.labour, "Logbook service", 1, 15455),
+        (LineKind.labour, "Logbook service", 1.5, 12000),
         (LineKind.part, "Engine oil 5W-30 (5L)", 1, 7500),
         (LineKind.part, "Oil filter - Toyota", 1, 2500),
     ], "Front pads getting low, maybe 3 months."),
     ("ABC123", 365, "Logbook service and wiper blades", [
-        (LineKind.labour, "Logbook service", 1, 15455),
+        (LineKind.labour, "Logbook service", 1.5, 12000),
         (LineKind.part, "Engine oil 5W-30 (5L)", 1, 7500),
         (LineKind.part, "Oil filter - Toyota", 1, 2500),
         (LineKind.part, "Wiper blades pair", 1, 3636),

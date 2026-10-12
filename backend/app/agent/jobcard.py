@@ -296,7 +296,7 @@ def _subtotal_for(total_cents: int) -> int:
     rate = get_settings().gst_rate
     base = int(round(total_cents / (1 + rate)))
     for sub in (base, base - 1, base + 1):
-        if sub + int(round(sub * rate)) == total_cents:
+        if sub + svc.gst_on(sub) == total_cents:
             return sub
     return base
 

@@ -55,8 +55,12 @@ def _send_invoice_for_approval(s: Session, job_id: int) -> dict[str, Any]:
     j = s.get(Job, int(job_id))
     if not j:
         return {"error": "no such job"}
-    if not s.exec(select(JobLine).where(JobLine.job_id == j.id)).first():
+    lines = s.exec(select(JobLine).where(JobLine.job_id == j.id)).all()
+    if not lines:
         return {"error": "that job has no items yet; describe the work first"}
+    unpriced = [l.description for l in lines if not l.unit_cents]
+    if unpriced:
+        return {"error": f"not sent: no price yet for {', '.join(unpriced)}. Ask him what to charge; don't look one up or add one yourself"}
     r = svc.request_invoice_approval(s, j)
     return {"job_id": j.id, **r}
 

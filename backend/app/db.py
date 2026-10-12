@@ -46,3 +46,16 @@ def get_session() -> Iterator[Session]:
     """FastAPI dependency."""
     with Session(get_engine()) as session:
         yield session
+
+
+def reset_demo_data() -> None:
+    """Drop every table and reseed: the clean state for recording a demo take."""
+    from . import models  # noqa: F401
+    from .seed import seed
+
+    engine = get_engine()
+    SQLModel.metadata.drop_all(engine)
+    SQLModel.metadata.create_all(engine)
+    with Session(engine) as s:
+        seed(s)
+        s.commit()

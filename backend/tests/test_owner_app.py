@@ -106,3 +106,11 @@ def test_part_for_another_car_is_not_used(client):
     with session_scope() as s:
         assert match_part(s, "Pads", "Mazda CX-5 1KR9ZZ") is None
         assert match_part(s, "Brake pads front", "Toyota Corolla ABC123") is not None
+
+
+def test_demo_reset_restores_clean_state(client):
+    client.post("/api/owner/voice", json={"text": "The CX-5 is done"})
+    assert client.post("/api/demo/reset").json()["ok"]
+    today = client.get("/api/owner/today").json()
+    assert any(j["rego"] == "1KR9ZZ" and j["status"] == "in_progress" for j in today["jobs"])
+    assert len(client.get("/api/outbox").json()["outbox"]) <= 2  # only the seeded receipt

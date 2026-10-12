@@ -119,13 +119,20 @@ def focus_job(s: Session) -> Job | None:
 _AMEND = re.compile(r"^\s*(?:(?:actually|no|nah|sorry|oh|and|also|plus|wait|hang on|mate)[\s,.!]+)*(?:make it|make that|change|add|put|take off|take out|remove|drop|forget|it was|labour was|that was|charge (?:her|him|them|it))\b", re.I)
 
 
+_FILLS_IN = re.compile(r"\b(rego|registration|plate|customer|name is|owner is)\b", re.I)
+
+
 def amend_text(s: Session, text: str) -> str | None:
     """"Make it 380 all up" or "add wipers to that" straight after a draft: his earlier
     description plus the change, so nothing he already said is lost when the job's lines
     are rewritten. None when it isn't a correction to the job he's on."""
+    last = recent_turns(s, 1)
+    # "rego's GLF222, customer Ben Hall" after "I couldn't find the Golf": the same job, now findable
+    if last and last[-1].kind == "draft" and not last[-1].job_id and last[-1].described and _FILLS_IN.search(text) \
+            and datetime.utcnow() - last[-1].created_at < timedelta(minutes=15):
+        return f"{last[-1].described}\nThen he added: {text}"
     if not _AMEND.search(text):
         return None
-    last = recent_turns(s, 1)
     focus = focus_job(s)
     if not last or not focus or last[-1].kind != "draft" or last[-1].job_id != focus.id or not last[-1].described:
         return None
@@ -285,7 +292,11 @@ def owner_context(s: Session, text: str, *, for_extract: bool = False) -> str:
         )
 
     cars = mentioned(s, text)
-    if focus and not cars and re.search(r"\b(it|that|this|same|again|her|his|him|them|one)\b", text, re.I):
+    pronoun = re.search(r"\b(it|that|this|same|again|she|he|her|his|him|they|them|their|one)\b", text, re.I)
+    if not cars and pronoun and turns:
+        # "and what's he driving" right after "how does Jack usually pay"
+        cars = mentioned(s, f"{turns[-1].said} {turns[-1].outcome}", limit=1)
+    if focus and not cars and pronoun:
         c = s.get(Customer, focus.customer_id)
         v = s.get(Vehicle, focus.vehicle_id) if focus.vehicle_id else None
         if c:

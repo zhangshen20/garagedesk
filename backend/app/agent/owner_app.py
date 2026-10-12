@@ -46,7 +46,7 @@ status: "to_invoice" for not invoiced yet or ready to bill, "unpaid" for owing m
 If his words only make sense as an answer to your last message (e.g. "the Nissan one", "yes, that one", "the first one"), use that message to fill intent, when and car."""
 
 _WORK = re.compile(
-    r"\b(\d+(?:\.\d+)?\s*(?:hours?|hrs?|bucks|dollars)|hour and a half|half an hour|an hour|all up|labour\s+\$?\d+|\$\s*\d+|fitted|replaced|changed the)\b",
+    r"\b((?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight)\s*(?:hours?|hrs?|bucks|dollars)|hour and a half|half an hour|an hour|all up|labour\s+\$?\d+|\$\s*\d+|fitted|replaced|changed the)\b",
     re.I,
 )
 
@@ -61,6 +61,9 @@ _WANTS_INVOICE = re.compile(
     re.I,
 )
 
+
+_QUESTION = re.compile(r"^\s*(?:and\s+|so\s+)?(what|what's|whats|when|where|who|which|how|why|did|does|has|have|is|are|was|were)\b(?!\s+(?:the|a|an)\s+\w+\s+(?:on|for)\b)", re.I)
+_WAITING = re.compile(r"\bwaiting (?:on|for)\b", re.I)
 
 _DAY_WORDS = re.compile(r"\b(yesterday|yday|today|morning|arvo|afternoon|tonight|tomorrow|week|month|days?|ago|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|tues|wed|thu|thurs|fri|sat|sun|\d{1,2}(?:st|nd|rd|th)?|\d{1,2}/\d{1,2}|january|february|march|april|may|june|july|august|september|october|november|december|recently|lately)\b", re.I)
 
@@ -105,6 +108,13 @@ def route(text: str, context: list[dict[str, str]] | None = None) -> dict[str, A
     # it's about a job we already have
     if intent == "job_card" and not (_WORK.search(text) or _JOB_WORDS.search(text)):
         intent = "invoice"
+    # a question ("what did we charge her", "what did that come to") never writes up an
+    # invoice, and a car waiting on parts is a status, not work to bill
+    if intent in ("job_card", "invoice") and not _WORK.search(text):
+        if _QUESTION.match(text):
+            intent = "find"
+        elif _WAITING.search(text):
+            intent = "other"
     when = str(out.get("when") or "").strip()
     # a small model sometimes fills in a day he never said
     if when and not _said(when, text, context):
@@ -160,6 +170,11 @@ def _draft(text: str, d: dict[str, Any], model: str) -> dict[str, Any]:
 
 def _reply(text: str, readback: str, model: str, **extra: Any) -> dict[str, Any]:
     return {"kind": "reply", "readback": readback, "steps": extra.pop("steps", []), "model": model, **extra}
+
+
+# Questions the job search can't answer from a list (bookings, what was charged, a
+# car's history, "what did that come to"): the agent answers these with its memory.
+_ASK_AGENT = re.compile(r"\b(booked|booking|charged?|come to|came to|cost|how much|last time|last in|usually|remember|notes?)\b", re.I)
 
 
 def _booked_today(s: Session, hint: str) -> str:
@@ -246,7 +261,7 @@ def _handle(s: Session, text: str) -> dict[str, Any]:
         out = invoice_for(s, text, r)
         remember(s, text, out["readback"], r["model"])
         return out
-    if r["intent"] == "find":
+    if r["intent"] == "find" and not _ASK_AGENT.search(text):
         out = find_for(s, text, r)
         remember(s, text, out["readback"], r["model"])
         return out

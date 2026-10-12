@@ -38,7 +38,7 @@ Reply with JSON only:
  "paid_method": "eftpos" | "cash" | "transfer" | "" ,
  "notes": "anything else worth keeping, e.g. 'rear pads 30%, tell customer next time'"}
 He works the money out on a calculator and says it: per item ("pads 120"), for labour ("labour 180"), or for the whole job ("350 all up", "charge her 350"). Put each figure exactly where he said it: item prices in parts[].price_dollars, a labour amount in labour_dollars, a whole-job amount in total_dollars.
-Rules: only include prices he actually states; never guess a price. Prices said by the mechanic are what the customer pays including GST unless he says "plus GST". Work items without a part (machining, inspection, top-ups) belong in labour_description, not parts. qty counts items as a parts shop sells them: "both wiper blades" is one pair, "oil and filter" is one oil and one filter."""
+Rules: only include prices he actually states; never guess a price. Prices said by the mechanic are what the customer pays including GST unless he says "plus GST". Work items without a part (machining, inspection, top-ups) belong in labour_description, not parts. A part he names is a parts item even when it is also the job: "front pads" is labour "Replace front pads" plus the part "Brake pads front"; "did the battery" is labour plus the part "Battery". qty counts items as a parts shop sells them: "both wiper blades" is one pair, "oil and filter" is one oil and one filter."""
 
 RECEIPT_VISION_PROMPT = "Transcribe this supplier receipt or parts invoice exactly, line by line: supplier name, each item with quantity and price, GST and the total. Plain text only."
 

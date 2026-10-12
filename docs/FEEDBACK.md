@@ -11,7 +11,7 @@ Required by the hackathon submission. The live-test findings come from running `
 **What was confusing**
 - Exact Nemotron model ids are hard to find in the docs; the marketing page shows one id in a code sample and the rest only in URL-encoded catalogue links, with inconsistent casing (`nvidia/Nemotron-3_5-Lightning` vs `nvidia/nemotron-3-super-120b-a12b`). A single "models and ids" table in the docs would save every team an hour.
 - `/models` in the docs site returned an error when fetched programmatically during the build.
-- There is no speech-to-text or text-to-speech model in the catalogue (checked 2026-10-12). Our owner doesn't type, so voice is the main input; we had to use the iPhone's own dictation and Twilio's speech recognition instead. A hosted Whisper-class model next to Nemotron would let a voice-first app keep the whole pipeline on Nebius.
+- There is no speech-to-text or text-to-speech model in the catalogue (checked 2026-10-12). Our owner doesn't type, so voice is the main input. Browser speech recognition only works in Safari on an iPhone (Chrome on iOS blocks it), so we ended up running faster-whisper and Kokoro ourselves on the Nebius VM. A hosted Whisper-class model and a TTS voice next to Nemotron would let a voice-first app keep the whole pipeline on one key.
 - The catalogue does include vision models (MiniCPM-V 4.5, Gemma 3 27B), which is what makes "photograph the supplier receipt" possible on the same key.
 
 **Live-test notes** (2026-10-11, `backend/scripts/live_smoke.py`, 8 agent turns plus one daily report)
@@ -37,11 +37,14 @@ Required by the hackathon submission. The live-test findings come from running `
 
 - The vision model and Nemotron share one key and one OpenAI-compatible API, so "photo, then Nemotron Super extracts line items" was a few lines on top of the existing client. In a live run MiniCPM-V 4.5 transcribed a handwritten note in about 6 seconds, and spoken or photographed jobs became correct invoice drafts in 2-8 seconds end to end.
 - Splitting the owner pipeline into Nano (route: is this a finished job, a status update or a payment?) and Super (extract line items as JSON) kept the common path fast and let us keep pricing in plain code. Nemotron extracts what was done and the figures the owner said; it never makes up a price, and code fills anything he left out from the shop's rates.
-- Because Token Factory has no speech model, the owner app relies on Safari's Web Speech API, which only works on HTTPS pages. That pushed a certificate onto our demo VM earlier than we planned (an sslip.io name with Caddy and Let's Encrypt).
+- Because Token Factory has no speech model, the first owner app used Safari's Web Speech API. It needs HTTPS (which pushed a certificate onto our VM early: an sslip.io name with Caddy and Let's Encrypt) and it doesn't work at all in Chrome on an iPhone, which is what the first real tester used. We replaced it with recording on the phone and transcribing on the VM: faster-whisper base.en, int8 on a 2-vCPU `cpu-d3` instance, primed with the cars and regos in the shop that day so plates come out right. Whisper heard "labour" as "label" often enough that we correct it in code.
+- Replies are spoken by Kokoro 82M (int8 ONNX, Apache-2.0) on the same VM: first audio in about 0.6 seconds, cached after that. It sounds far better than the phone's built-in voices, and a short read-back that ends with a question ("Send it to Jenny?") lets the owner answer "yep" instead of tapping.
+- Job extraction on Nemotron 3 Super took 4-7 seconds with reasoning on. It is a one-shot JSON task, so we turned reasoning off for it and it now takes about 1 second, and the 47-utterance set below still passes.
+- Nemotron 3 Nano is good at pulling slots out of messy speech. "Find yesterday's jobs and prepare invoice", "do the X-Trail from Friday", "Dan's one" and "what's waiting to be invoiced" all come back as a day, car, customer or status, and plain code finds the job. We keep 47 real owner utterances with expected outcomes; all 47 pass on live Nemotron (three runs), and the same set runs on every pull request against the mock models.
 
 *More findings from the owner app are added as they come in.*
 
 ## Suggestions
-- Add a speech-to-text model to Token Factory. Voice-first apps for people who don't type are a natural fit for Nemotron, and today they need a second provider.
+- Add speech-to-text and text-to-speech models to Token Factory. Voice-first apps for people who don't type are a natural fit for Nemotron, and today they have to host their own speech models or use a second provider.
 - Publish a tool-calling reliability note per model (how often arguments are well-formed JSON, whether parallel tool calls are supported).
 - A "small business agent" cookbook recipe: Nano classify → Super act → Ultra summarise is a pattern many apps will want.

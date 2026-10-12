@@ -6,12 +6,12 @@ Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 
 ## Setup
 
-- **Owner:** a real iPhone with https://66-201-4-40.sslip.io/owner open in Safari. Record in Safari rather than from a Home Screen icon, because iOS can block speech recognition for Home Screen web apps; check that Siri & Dictation is on and allow the microphone when asked. If the talk button still won't listen, tap "Talk button not working? Use the keyboard microphone" under it and use the keyboard's dictation key instead. Record it with the iPhone's screen recording, plus a hand-held shot of someone in the workshop tapping the button.
+- **Owner:** a real iPhone with https://66-201-4-40.sslip.io/owner open in any browser (Chrome or Safari both work, because the phone records the audio and the server turns it into text). Allow the microphone when asked, and turn the ringer volume up so the read-back is audible. Record it with the iPhone's screen recording, plus a hand-held shot of someone in the workshop holding the button down while he talks.
 - **Wife:** a second phone. The approve link arrives on the Outbox page of the dashboard (or by SMS once Twilio is on); open it on this phone.
 - **Customer:** the customer's texts are also on the Outbox page. A phone-sized browser window on that page works as "the customer's phone".
 - **Dashboard:** https://66-201-4-40.sslip.io/ on a laptop for the closing shots.
-- **Before each take:** tap **Reset demo data** at the bottom of the dashboard's sidebar, so the Corolla (ABC123) and the CX-5 are in the workshop and nothing is waiting for approval. Press Generate once on the Report page so the Ultra report is ready. Say the line once on a test run so the first live Nemotron call is warm, then reset again.
-- **Live models:** each spoken job takes 2-5 seconds and a receipt photo about 6 seconds. Keep the camera on the phone and talk over the pause instead of cutting; the wait is honest and short.
+- **Before each take:** tap **Reset demo data** at the bottom of the dashboard's sidebar, so the Corolla (ABC123) and the CX-5 are in the workshop, Dan's X-Trail was finished yesterday and not invoiced, and nothing is waiting for approval. The phone names the wife from the server's `APPROVER_NAME` setting; this script uses Jenny (unset, it says "the office"). Press Generate once on the Report page so the Ultra report is ready. Say the line once on a test run so the first live Nemotron call is warm, then reset again.
+- **Live models:** after he lets go, the words and the invoice come back within a few seconds, and a receipt photo takes about 6 seconds. Keep the camera on the phone and talk over the pause instead of cutting; the wait is honest and short.
 - **Props:** a calculator on the bench, and a supplier's parts receipt for the photo scene. No faces or real number plates are needed anywhere.
 
 ## 0:00–0:20  The problem
@@ -19,50 +19,56 @@ Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 
 "This is a real workshop in Sunshine North, Melbourne. The owner is a great mechanic who doesn't use computers and doesn't type. When a car is done, he works out the price on a calculator and rings his wife, and tells her what he did and how much to charge. She makes the tax invoice. But she works part-time somewhere else now, and if she can't pick up, the customer waits. GarageDesk replaces that phone call."
 
-## 0:20–1:15  He says what he'd have told her
-*Owner app on the iPhone. Tap the big round button (it turns red: "Listening… tap when done"), and say, the way he'd say it to his wife: "Corolla ABC123, front pads, hour and a half, 350 all up." His words appear as he speaks. Tap again when done.*
+## 0:20–1:05  He says what he'd have told her
+*Owner app on the iPhone. Hold the big round button down (it turns red: "Listening… talk now") and say, the way he'd say it to his wife: "Corolla ABC123, front pads, hour and a half, 350 all up." Let go to send. His words appear on screen.*
 
-"Same words, same numbers, but he says them to his phone. Nemotron 3 Nano works out what he's asking for in under a second, and Nemotron 3 Super turns it into invoice lines. His figures are the charge: three hundred and fifty, all up, is what the customer pays. The pads are priced from the shop's own list and the rest goes on labour, never a number the AI made up. And Maria and her Corolla were already on the board from her online booking, so he didn't have to say who it was for."
+"Same words, same numbers, but he says them to his phone. It works in any phone browser, with no typing. Nemotron 3 Nano works out what he's asking for in under a second, and Nemotron 3 Super turns it into invoice lines. His figures are the charge: three hundred and fifty, all up, is what the customer pays. The pads are priced from the shop's own list and the rest goes on labour, never a number the AI made up. And Maria and her Corolla were already on the board from her online booking, so he didn't have to say who it was for."
 
-*The phone reads back: "Invoice for Maria's Toyota Corolla: labour 219.10 and brake pads front 130.90. 350.00 dollars including GST. Send it?" Tap Send.*
+*The phone says, in a natural voice: "Maria's Corolla. Front brake pads and an hour and a half labour. Three hundred and fifty dollars all up. Send it to Jenny?" He holds the button and says "yep".*
 
-"It reads his numbers back, the way his wife would have. If something's off, he just says it again."
+"It reads it back in one breath, the way his wife would have, and asks the next question for him. He says yep and it's sent. If something's off, he just says it again, and "Hear every line" reads out each line and the GST."
 
-## 1:15–1:25  A parts receipt instead of a list
+## 1:05–1:20  Yesterday's job he forgot
+*Hold the button: "Find yesterday's jobs and prepare invoice." The draft for Dan's Nissan X-Trail, rear brake pads, comes up and is read back: $240.90 all up. Say "yep".*
+
+"He doesn't need dates or job numbers. Yesterday, a rego, a customer's name, the car or "what's waiting to be invoiced": it finds the job and has the invoice ready.
+
+## 1:20–1:30  A parts receipt instead of a list
 *A second job: he says "CX-5 1KR9ZZ, machined the rotors, one hour labour", then taps "Add parts from a receipt photo" on the draft and shoots the supplier's receipt. The parts appear on the job and the new total is read back.*
 
 "If there's a long list of parts, he doesn't read it out. He photographs the supplier's receipt. A vision model on Nebius puts the parts on the job and books the receipt as an expense, GST and all."
 
-## 1:25–1:55  His wife approves from her other job
+## 1:30–1:55  His wife approves from her other job
 *Second phone: the text arrives. Tap the link, show the invoice with GST split out, tap "Approve and send".*
 
 "Instead of a phone call, his wife gets a text. She checks the invoice on her break and taps once. She stays in control of the books without being in the shop. If something's wrong she taps Fix, writes a note, and it goes back to him. A five-minute interruption for two people becomes a three-second tap for one."
 
 ## 1:55–2:15  The customer, and getting paid
-*Customer's phone (Outbox): "Hi Maria, your Toyota Corolla is ready to collect. Tax invoice INV-… for $350.00 inc GST". Open the PDF: an Australian tax invoice with ABN and GST. Back on the owner app, tap Paid EFTPOS on the Corolla; the receipt text appears.*
+*Customer's phone (Outbox): "Hi Maria, your Toyota Corolla is ready to collect. Tax invoice INV-… for $350.00 inc GST". Open the PDF: an Australian tax invoice with ABN and GST. Back on the owner app, the phone has already said "Jenny approved Maria's Corolla. The invoice is with Maria. Say yes when they've paid on EFTPOS." When she has paid, he says "yes" (or taps Paid EFTPOS); the receipt text appears.*
 
-"Maria knows her car is ready before she walks in, and she gets a proper Australian tax invoice. She pays on the EFTPOS terminal, he taps Paid, and the receipt goes out. The shop has no accounting software, and now it doesn't need any."
+"Maria knows her car is ready before she walks in, and she gets a proper Australian tax invoice. The phone tells him his wife approved it, and when Maria pays on the EFTPOS terminal he just says yes, and the receipt goes out. The shop has no accounting software, and now it doesn't need any."
 
 ## 2:15–2:35  The rest of his day
-*Tap the button: "The CX-5 will be ready tomorrow afternoon." Show that customer's text. Then a fast montage, 3 seconds each: a customer booking a service in the web chat; "need front pads for the Mazda" turning into a parts order with a Tavily-found price waiting on Approvals; the Nemotron 3 Ultra end-of-day report.*
+*Hold the button: "The CX-5 will be ready tomorrow afternoon." Show that customer's text. Then a fast montage, 3 seconds each: a customer booking a service in the web chat; "need front pads for the Mazda" turning into a parts order with a Tavily-found price waiting on Approvals; the Nemotron 3 Ultra end-of-day report.*
 
 "Status updates text the customer, so nobody needs to come in and ask. And behind that one button is a whole back office: a front desk that answers customers and books cars, parts prices searched live with Tavily, and an end-of-day report written by Nemotron 3 Ultra."
 
 ## 2:35–2:50  Close
 *Back to the owner under a car. Text overlay: "Admin calls to his wife: several a day → none." Then the GarageDesk name and the repo URL.*
 
-"No keyboard, no job cards, no new habits. Nemotron Nano, Super and Ultra plus a vision model, all on Nebius Token Factory. Open source under MIT. GarageDesk: he fixes cars, it does the paperwork."
+"No keyboard, no job cards, no new habits. Nemotron Nano, Super and Ultra plus a vision model on Nebius Token Factory, with speech recognition and the voice running on a Nebius AI Cloud VM. Open source under MIT. GarageDesk: he fixes cars, it does the paperwork."
 
 ## Shot list
 
 | # | Shot | Where |
 |---|---|---|
 | 1 | Owner with a calculator, then "Calling: Wife" on his phone | Workshop footage |
-| 2 | Tap to talk with his own figures, words appearing, read-back audible, tap Send | Owner app on the iPhone |
+| 2 | Hold to talk with his own figures, let go, words appear, short spoken read-back, "yep" sends | Owner app on the iPhone |
+| 2b | "Find yesterday's jobs and prepare invoice" brings up Dan's X-Trail at $240.90 | Owner app on the iPhone |
 | 3 | Photo of a supplier receipt, parts land on the job | Owner app on the iPhone |
 | 4 | Text arrives, approve page with GST, tap "Approve and send" | Second phone |
 | 5 | "Your car is ready" text and the invoice PDF | Outbox, phone-sized window |
-| 6 | Paid EFTPOS tap and receipt text | Owner app, then Outbox |
+| 6 | "Jenny approved" spoken on his phone, "yes" marks Paid EFTPOS, receipt text | Owner app, then Outbox |
 | 7 | "CX-5 ready tomorrow" by voice, customer text | Owner app, then Outbox |
 | 8 | Customer booking in the web chat | /chat |
 | 9 | Parts order with a Tavily price waiting on Approvals | Dashboard |

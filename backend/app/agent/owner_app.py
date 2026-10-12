@@ -214,6 +214,16 @@ def find_for(s: Session, text: str, r: dict[str, Any]) -> dict[str, Any]:
 
 
 def handle_voice(s: Session, text: str) -> dict[str, Any]:
+    from ..voice.flow import reply_to_offer, with_voice
+
+    # "yes" / "nah" answers the step the app just offered (send it, mark it paid)
+    short = reply_to_offer(s, text)
+    if short is not None:
+        return short
+    return with_voice(_handle(s, text))
+
+
+def _handle(s: Session, text: str) -> dict[str, Any]:
     r = route(text, recent_context(s))
     if r["intent"] == "job_card":
         out = {"kind": "draft", **draft_from_text(s, text).as_dict()}

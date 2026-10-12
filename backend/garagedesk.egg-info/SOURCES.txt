@@ -35,6 +35,11 @@ app/vision/reader.py
 app/vision/router.py
 app/vision/schema.py
 app/vision/to_job.py
+app/voice/__init__.py
+app/voice/flow.py
+app/voice/offers.py
+app/voice/spoken.py
+app/voice/tts.py
 garagedesk.egg-info/PKG-INFO
 garagedesk.egg-info/SOURCES.txt
 garagedesk.egg-info/dependency_links.txt
@@ -44,3 +49,4 @@ tests/test_flows.py
 tests/test_jobcard_vision.py
 tests/test_owner_app.py
 tests/test_site_bookings.py
+tests/test_voice.py

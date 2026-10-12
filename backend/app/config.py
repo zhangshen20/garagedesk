@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     labour_rate_cents: int = 12000  # per hour, ex GST
     parts_markup_percent: float = 0  # added to supplier receipt prices when they go on a job
 
+    # --- The voice the owner hears (app/voice/tts.py) -----------------------------------
+    tts_mode: str = "auto"  # auto | kokoro | mock | off (off = the browser's own voice)
+    tts_voice: str = "af_heart"  # Kokoro voice; bf_emma / bm_george for British
+    tts_speed: float = 1.12
+    tts_model_dir: str = "./models/kokoro"
+
     # Lets anyone put the demo back to its clean recording state (POST /api/demo/reset).
     # Turn off for a real shop.
     demo_reset_enabled: bool = True

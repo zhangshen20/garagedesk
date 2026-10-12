@@ -10,9 +10,13 @@ RUN npm run build   # outputs to ../backend/static (see vite.config.ts) -> /back
 FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PORT=8000
 WORKDIR /app
+# The owner's voice: Kokoro 82M (Apache-2.0), int8 ONNX, about 120 MB with its voices
+ARG KOKORO_URL=https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0
+RUN mkdir -p /models/kokoro && python -c "import sys, urllib.request as u; [u.urlretrieve(f'{sys.argv[1]}/{f}', f'/models/kokoro/{f}') for f in ('kokoro-v1.0.int8.onnx', 'voices-v1.0.bin')]" "$KOKORO_URL"
+ENV TTS_MODEL_DIR=/models/kokoro
 COPY backend/pyproject.toml ./
 COPY backend/app ./app
-RUN pip install --no-cache-dir ".[stt]" \
+RUN pip install --no-cache-dir ".[stt,tts]" \
  && python -c "from faster_whisper import WhisperModel; WhisperModel('base.en', device='cpu', compute_type='int8')"
 COPY --from=web /backend/static ./static
 RUN mkdir -p /data/files

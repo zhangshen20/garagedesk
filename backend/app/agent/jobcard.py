@@ -24,18 +24,31 @@ from ..config import get_settings
 from ..llm import get_llm
 from ..models import Booking, BookingStatus, Job, JobLine, JobStatus, LineKind, Part
 
-EXTRACT_PROMPT = """You turn a mechanic's spoken or handwritten job notes into a job card. The notes are in Australian workshop slang and may come from speech recognition, so expect odd spelling ("break pads" = brake pads, "five W thirty" = 5W-30, "hour and a half" = 1.5 hours).
+EXTRACT_PROMPT = """You turn what a mechanic says about a finished job into a job card, the way he would tell his wife over the phone so she can make the tax invoice. The notes are in Australian workshop slang and may come from speech recognition, so expect odd spelling ("break pads" = brake pads, "five W thirty" = 5W-30, "hour and a half" = 1.5 hours).
 Reply with JSON only:
 {"car": "words that identify the car or customer, e.g. 'Corolla ABC123' or 'Maria's Corolla'",
  "rego": "registration plate if said, letters and digits only, else empty",
  "customer_name": "customer name if said, else empty",
  "labour_hours": number or null,
  "labour_description": "short description of the work done, e.g. 'Replace front pads, machine rotors'",
+ "labour_dollars": number or null,
+ "total_dollars": number or null,
  "parts": [{"name": "part name as a parts shop would write it", "qty": number, "price_dollars": number or null}],
  "fees": [{"name": "...", "price_dollars": number}],
  "paid_method": "eftpos" | "cash" | "transfer" | "" ,
  "notes": "anything else worth keeping, e.g. 'rear pads 30%, tell customer next time'"}
-Rules: only include prices the notes actually state; never guess a price. Prices said by the mechanic are what the customer pays including GST unless he says "plus GST". Work items without a part (machining, inspection, top-ups) belong in labour_description, not parts. qty counts items as a parts shop sells them: "both wiper blades" is one pair, "oil and filter" is one oil and one filter."""
+He works the money out on a calculator and says it: per item ("pads 120"), for labour ("labour 180"), or for the whole job ("350 all up", "charge her 350"). Put each figure exactly where he said it: item prices in parts[].price_dollars, a labour amount in labour_dollars, a whole-job amount in total_dollars.
+Rules: only include prices he actually states; never guess a price. Prices said by the mechanic are what the customer pays including GST unless he says "plus GST". Work items without a part (machining, inspection, top-ups) belong in labour_description, not parts. qty counts items as a parts shop sells them: "both wiper blades" is one pair, "oil and filter" is one oil and one filter."""
+
+RECEIPT_VISION_PROMPT = "Transcribe this supplier receipt or parts invoice exactly, line by line: supplier name, each item with quantity and price, GST and the total. Plain text only."
+
+RECEIPT_PROMPT = """You read a car parts supplier receipt (already transcribed to text) for a mechanic shop.
+Reply with JSON only:
+{"supplier": "supplier name or empty",
+ "parts": [{"name": "item as written, tidied", "qty": number, "line_total_dollars": number}],
+ "total_dollars": number or null,
+ "gst_dollars": number or null}
+Rules: copy prices exactly as printed; line_total_dollars is what that line costs including GST; skip freight, rounding and payment lines."""
 
 VISION_PROMPT = "Transcribe this handwritten mechanic's job card exactly as written, line by line. Keep numbers, prices and the registration plate exactly. Plain text only."
 
@@ -219,12 +232,21 @@ def apply_to_job(s: Session, job: Job, ex: dict[str, Any]) -> list[str]:
         s.delete(line)
     s.flush()
 
-    hours = ex.get("labour_hours")
+    hours = _num(ex.get("labour_hours"))
+    labour_dollars = _num(ex.get("labour_dollars"))
+    total_dollars = _num(ex.get("total_dollars"))
     desc = str(ex.get("labour_description") or job.title or "Labour").strip()
-    if hours:
-        s.add(JobLine(job_id=job.id, kind=LineKind.labour, description=desc[:1].upper() + desc[1:], qty=float(hours), unit_cents=settings.labour_rate_cents))
-    else:
+    desc = desc[:1].upper() + desc[1:]
+    labour: JobLine | None = None
+    if labour_dollars is not None:
+        # his figure for the labour, whatever the hours
+        labour = JobLine(job_id=job.id, kind=LineKind.labour, description=desc + (f" ({hours:g} hrs)" if hours else ""), qty=1, unit_cents=_ex_gst(labour_dollars))
+    elif hours:
+        labour = JobLine(job_id=job.id, kind=LineKind.labour, description=desc, qty=hours, unit_cents=settings.labour_rate_cents)
+    elif total_dollars is None:
         warnings.append("I didn't hear the labour time.")
+    if labour:
+        s.add(labour)
 
     for p in ex.get("parts") or []:
         name = str(p.get("name") or "").strip()
@@ -246,6 +268,10 @@ def apply_to_job(s: Session, job: Job, ex: dict[str, Any]) -> list[str]:
         if f.get("name") and f.get("price_dollars") not in (None, ""):
             s.add(JobLine(job_id=job.id, kind=LineKind.fee, description=str(f["name"]), qty=1, unit_cents=_ex_gst(float(f["price_dollars"]))))
 
+    s.flush()
+    if total_dollars is not None:
+        warnings += _hit_total(s, job, labour, desc, hours, total_dollars, labour_fixed=labour_dollars is not None)
+
     if ex.get("notes"):
         job.mechanic_notes = ((job.mechanic_notes or "") + "\n" + str(ex["notes"])).strip()
     job.status = JobStatus.done
@@ -255,16 +281,60 @@ def apply_to_job(s: Session, job: Job, ex: dict[str, Any]) -> list[str]:
     return warnings
 
 
+def _num(v: Any) -> float | None:
+    try:
+        return None if v in (None, "") else float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _subtotal_for(total_cents: int) -> int:
+    """Ex-GST subtotal whose GST-inclusive total comes out to exactly total_cents."""
+    rate = get_settings().gst_rate
+    base = int(round(total_cents / (1 + rate)))
+    for sub in (base, base - 1, base + 1):
+        if sub + int(round(sub * rate)) == total_cents:
+            return sub
+    return base
+
+
+def _hit_total(s: Session, job: Job, labour: JobLine | None, desc: str, hours: float | None, total_dollars: float, *, labour_fixed: bool) -> list[str]:
+    """He said what the whole job costs. Make the invoice add up to exactly that: the
+    labour line takes the balance after the parts, as his wife would have done."""
+    target = _subtotal_for(int(round(total_dollars * 100)))
+    lines = s.exec(select(JobLine).where(JobLine.job_id == job.id)).all()
+    others = sum(int(round(l.qty * l.unit_cents)) for l in lines if l is not labour)
+    if labour_fixed:
+        current = sum(int(round(l.qty * l.unit_cents)) for l in lines)
+        if current == target:
+            return []
+        return [f"Your items add up to {(current * 1.1) / 100:,.2f}, not {total_dollars:,.2f}."]
+    balance = target - others
+    if balance < 0:
+        return [f"The parts alone come to more than {total_dollars:,.2f}."]
+    if labour is None:
+        labour = JobLine(job_id=job.id, kind=LineKind.labour, description=desc, qty=1, unit_cents=0)
+        s.add(labour)
+    labour.qty = 1
+    labour.unit_cents = balance
+    labour.description = desc + (f" ({hours:g} hrs)" if hours else "")
+    s.flush()
+    return []
+
+
 def readback(view: dict[str, Any], warnings: list[str]) -> str:
     first = (view["customer"] or "the customer").split()[0]
     car = " ".join(view["vehicle"].split()[:2]) or "car"
+    gst = 1 + get_settings().gst_rate
     items = []
     for l in view["lines"]:
+        amount = l["qty"] * l["unit_cents"] * gst / 100
         if l["kind"] == "labour":
             h = l["qty"]
-            items.append(f"{h:g} hour{'s' if h != 1 else ''} labour")
+            what = "labour" if h == 1 else f"{h:g} hours labour"
         else:
-            items.append(l["description"].split(" - ")[0].lower())
+            what = l["description"].split(" - ")[0].lower()
+        items.append(f"{what} {amount:,.2f}" if l["unit_cents"] else what)
     listed = ", ".join(items[:-1]) + (" and " if len(items) > 1 else "") + items[-1] if items else "no items"
     total = view["total_cents"] / 100
     text = f"Invoice for {first}'s {car}: {listed}. {total:,.2f} dollars including GST."
@@ -273,6 +343,38 @@ def readback(view: dict[str, Any], warnings: list[str]) -> str:
     else:
         text += " Send it?"
     return text
+
+
+def add_receipt(s: Session, job: Job, image_b64: str, mime: str = "image/jpeg") -> Draft:
+    """He photographs the parts receipt that came with the delivery. The parts go on
+    the customer's job (at cost plus the shop's markup) and the receipt goes in the
+    books as an expense with its GST."""
+    llm = get_llm()
+    seen = llm.vision(RECEIPT_VISION_PROMPT, image_b64, mime=mime)
+    text = (seen.content or "").strip()
+    r = llm.chat([{"role": "system", "content": RECEIPT_PROMPT}, {"role": "user", "content": text}], tier="main", json_mode=True, max_tokens=1500, temperature=0)
+    rc = _parse_json(r.content or "")
+    model = " + ".join(m for m in (seen.model, r.model) if m)
+    parts = [p for p in rc.get("parts") or [] if p.get("name") and _num(p.get("line_total_dollars"))]
+    if not parts:
+        return Draft(ok=False, readback="I couldn't read any parts on that receipt. Try again with the whole receipt in view.", transcript=text, model=model)
+    markup = 1 + get_settings().parts_markup_percent / 100
+    for p in parts:
+        qty = _num(p.get("qty")) or 1
+        line_inc = float(p["line_total_dollars"])
+        s.add(JobLine(job_id=job.id, kind=LineKind.part, description=str(p["name"]), qty=qty, unit_cents=_ex_gst(line_inc * markup / qty)))
+    total = _num(rc.get("total_dollars")) or sum(float(p["line_total_dollars"]) for p in parts)
+    gst = _num(rc.get("gst_dollars"))
+    from ..models import Expense
+
+    supplier = svc.find_supplier(s, str(rc.get("supplier") or ""))
+    s.add(Expense(day=svc.today(), description=f"Parts for job {job.id}" + (f" from {rc.get('supplier')}" if rc.get("supplier") else ""), amount_cents=int(round(total * 100)), gst_cents=int(round(gst * 100)) if gst is not None else int(round(total * 100 - total * 100 / (1 + get_settings().gst_rate))), category="parts", supplier_id=supplier.id if supplier else None))
+    job.updated_at = datetime.utcnow()
+    s.flush()
+    svc.log_event(s, "owner", "receipt_added", f"job {job.id}: {len(parts)} parts from receipt", "job", job.id)
+    view = svc.job_view(s, job)
+    names = ", ".join(str(p["name"]).lower() for p in parts[:3])
+    return Draft(ok=True, job=view, readback=f"Added {names} from the receipt. New total {view['total_cents'] / 100:,.2f} dollars including GST. Send it?", transcript=text, model=model)
 
 
 def draft_from_text(s: Session, text: str, transcript_model: str = "") -> Draft:

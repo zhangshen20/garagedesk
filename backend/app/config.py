@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     approver_phone: str = "+61400000009"
     auto_approve_invoice_under_cents: int = 0  # inc GST; 0 = she approves every invoice
     labour_rate_cents: int = 12000  # per hour, ex GST
+    parts_markup_percent: float = 0  # added to supplier receipt prices when they go on a job
 
     # Lets anyone put the demo back to its clean recording state (POST /api/demo/reset).
     # Turn off for a real shop.

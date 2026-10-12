@@ -4,7 +4,7 @@
 
 Built for the Nebius x NVIDIA Global AI Hackathon (track: Best Apps & Agents) with a real workshop in Sunshine North, Melbourne. In the app the shop appears as **Sunshine Auto Care**.
 
-> **Live demo:** http://66.201.4.40/ (wife's and accountant's dashboard) and http://66.201.4.40/chat (customer chat), on a Nebius AI Cloud VM calling live Nemotron models.
+> **Live demo:** owner app at https://66-201-4-40.sslip.io/owner (open it on an iPhone), dashboard at https://66-201-4-40.sslip.io/ and customer chat at https://66-201-4-40.sslip.io/chat, on a Nebius AI Cloud VM calling live Nemotron models. The plain-HTTP address http://66.201.4.40/ also works, but iPhone speech recognition needs the HTTPS one. *(The HTTPS address goes live with the next redeploy.)*
 >
 > Demo mode works with **no API keys at all**. Add a Nebius key and the same code runs on live Nemotron models.
 
@@ -26,38 +26,46 @@ Success is one number: admin calls to his wife per day, from several to none.
 
 ## What it does
 
-### For the owner (iPhone web app, added to his home screen)
+### For the owner: `/owner`, a phone web app on his home screen
+
+One huge hold-to-talk button. No login, no forms, no app store.
 
 | He does | GarageDesk does |
 |---|---|
-| Holds the button: *"Corolla ABC123 done. Full service plus front pads, hour and a half."* | Matches the rego to today's job, prices parts and labour, builds an Australian GST tax invoice, and reads the total back. He says "send". |
-| Photographs his paper job card | A vision model reads the handwriting, Nemotron turns it into the same invoice draft |
-| Says *"Mazda's waiting on parts till Thursday"* or *"Hilux is done"* | Texts that customer and updates the status board, so fewer people walk in to ask |
-| Says *"paid on EFTPOS"* | Marks the invoice paid with the method. GarageDesk is the books |
-| Says *"need front pads for the Corolla"* | Finds the price (shop catalogue plus Tavily live search), reads back the best option, and drafts the order |
+| Holds the button: *"Corolla ABC123 done, front pads, machined the rotors, hour and a half."* | Nemotron 3 Nano routes it in under a second; Nemotron 3 Super turns the slang into line items as JSON; code finds the job and prices parts from the shop's catalogue and labour from its hourly rate. The draft is read back out loud: *"Invoice for Maria's Toyota Corolla: 1.5 hours labour and brake pads front. 328.90 dollars including GST. Send it?"* He taps Send. |
+| Taps "Photo of job card" and photographs his handwritten card | A vision model on Token Factory (MiniCPM-V 4.5) transcribes the handwriting and the same pipeline builds the invoice |
+| Says *"The CX-5 is waiting on parts till Thursday"* | Texts that customer, so fewer people walk in to ask |
+| Taps Paid EFTPOS, or says *"Corolla paid on EFTPOS"* | Marks the invoice paid with the method and texts the receipt |
+| Says *"need front pads for the Mazda"* | Finds the price (shop catalogue plus Tavily live search) and drafts a parts order that waits for approval |
 
-### For his wife (a link in a text message)
+The model never sets a price: prices come from the catalogue and the labour rate, or from what he said or wrote.
 
-*"Invoice #1042, Mrs Nguyen, $412.50 incl. GST. Approve / Fix."* One tap on her break and it goes to the customer. Supplier orders wait for the same tap. The dashboard is hers and the accountant's: jobs, invoices, money, a quarterly GST summary for the BAS and a CSV export.
+### For his wife: a link in a text
+
+When he taps Send she gets a text with a signed link (`/approve/:id`). She sees the invoice with GST split out and taps **Approve and send**, or **Fix** with a note that goes back to him. Once she trusts it, small invoices can skip approval (`AUTO_APPROVE_INVOICE_UNDER_CENTS`). The dashboard is hers and the accountant's: jobs, invoices, payments, parts and approvals.
+
+### Bookings from the shop's own website
+
+Bookings made on the shop's website flow onto the board, and a job card opens prefilled with customer, phone, car, rego and booked service, so he only says what was different. Marking a booking completed on the site starts an invoice draft, which still goes through his wife's approval. GarageDesk only reads from the site. See [docs/BOOKING_SITE_LINK.md](docs/BOOKING_SITE_LINK.md); the demo uses a mock week of bookings until the site exposes its read endpoint.
 
 ### For customers
 
-A text when the car is ready, with the invoice PDF. The phone line, SMS and web chat answer hours, book cars into a free bay, check "is my car ready?", reschedule, and take a message for anything the shop should decide (quotes, complaints).
+"Your car is ready" with the GST tax invoice PDF, and a receipt when they pay. The phone line, SMS and web chat answer hours, book cars into a free bay, check "is my car ready?", reschedule, and take a message for anything the shop should decide (quotes, complaints).
 
 ### Build status
 
-The back office (bookings, bays, job cards, GST invoice PDFs, payments, parts lookup, purchase orders, approvals, outbox, daily report, phone and SMS agents) is built and live. The owner-facing pieces are being built now and this README is updated as each lands:
-
 | Feature | Status |
 |---|---|
-| Owner iPhone app with hold-to-talk button and read-back | Building |
-| Talk-to-Invoice (speech to GST invoice draft) | Building |
-| Job card photo to invoice draft (vision model on Token Factory) | Building |
-| Wife approves invoices from a text link | Building |
-| "Car is ready" and status texts | Building |
-| "Paid on EFTPOS" and quarterly GST summary | Building |
-| Prefill jobs from the shop's booking website | Building |
-| Supplier receipt photos to expenses | Planned |
+| Owner iPhone app, hold-to-talk, read-back | Built |
+| Talk-to-Invoice | Built |
+| Job card photo to invoice | Built |
+| Wife approves or fixes from a text link | Built |
+| "Car is ready" and status texts | Built |
+| Paid on EFTPOS with receipt text | Built |
+| Prefill jobs from the shop's booking website | Built (mock bookings until the site exposes its read endpoint) |
+| Phone, SMS and web chat front desk; parts lookup and orders; daily report | Built |
+| Quarterly GST summary for the BAS, CSV export | Next |
+| Supplier receipt photos to expenses | Next |
 
 ### Nemotron tiers, each where it earns its keep
 
@@ -67,7 +75,7 @@ The back office (bookings, bays, job cards, GST invoice PDFs, payments, parts lo
 | main | `nvidia/nemotron-3-super-120b-a12b` | Turning a mechanic's loose words ("pads", "5W-30", "hour and a half") into exact invoice lines; the tool-calling front desk and back office agents |
 | deep | `nvidia/Nemotron-3-Ultra-550b-a55b` | The end-of-day report: reasons over cash, jobs, parts, overdue invoices and tomorrow's board in one pass |
 
-All model calls go through Token Factory's OpenAI-compatible endpoint (`https://api.tokenfactory.nebius.com/v1/`) with native function calling. Swap any tier with `MODEL_FAST`, `MODEL_MAIN`, `MODEL_DEEP`. Token Factory has no speech model, so speech-to-text is the iPhone's own dictation (and Twilio speech recognition on phone calls); photos are read by a vision model on Token Factory and Nemotron does the reasoning.
+All model calls go through Token Factory's OpenAI-compatible endpoint (`https://api.tokenfactory.nebius.com/v1/`) with native function calling. Swap any tier with `MODEL_FAST`, `MODEL_MAIN`, `MODEL_DEEP`. Token Factory has no speech model, so speech-to-text is the iPhone's own recognition through Safari's Web Speech API (which needs HTTPS; without it the page falls back to the keyboard's dictation button), and Twilio speech recognition on phone calls. Photos are read by a vision model on Token Factory and Nemotron does the reasoning.
 
 ### Safety rails that make it usable for a real business
 
@@ -125,7 +133,7 @@ scheduler ─4pm / 5:45pm─────────────────▶ 
 
 - **Nebius Token Factory** serves every model call through its OpenAI-compatible API with function calling. The design leans on having several Nemotron price/capability tiers behind one key: cheap Nano calls on every message, Super for the agents and invoice building, Ultra once a day, and a vision model for photos.
 - **NVIDIA Nemotron 3** (Nano, Super, Ultra) do all the language reasoning.
-- **Nebius AI Cloud** hosts the demo: one `cpu-d3` VM in eu-west1 runs the Docker image (API, built frontend, SQLite volume) behind Caddy; see `deploy/nebius/`.
+- **Nebius AI Cloud** hosts the demo: one `cpu-d3` VM in eu-west1 runs the Docker image (API, built frontend, SQLite volume) behind Caddy with a Let's Encrypt certificate for the sslip.io name; see `deploy/nebius/`.
 - **Tavily** searches live supplier prices for parts the shop doesn't stock; Nemotron Nano turns the results into structured prices.
 
 Feedback on the tools is in [docs/FEEDBACK.md](docs/FEEDBACK.md). The demo video script is [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) and the Devpost text is [docs/SUBMISSION.md](docs/SUBMISSION.md).

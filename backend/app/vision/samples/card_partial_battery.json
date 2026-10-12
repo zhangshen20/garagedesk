@@ -1,0 +1,33 @@
+{
+  "written": {
+    "date": "12/10/26",
+    "customer_name": "J. Patel",
+    "phone": "",
+    "vehicle": "Mazda 3",
+    "rego": "DEF456",
+    "odometer": "",
+    "work": "Replace battery\nTest charging system OK",
+    "parts": "Battery DIN55 x1",
+    "labour": "0.5",
+    "mechanic": "",
+    "notes": ""
+  },
+  "expected": {
+    "customer_name": "J. Patel",
+    "phone": null,
+    "vehicle": {
+      "make": "Mazda",
+      "model": "3",
+      "year": null
+    },
+    "rego": "DEF456",
+    "odometer_km": null,
+    "labour_hours": 0.5,
+    "parts": [
+      "battery"
+    ],
+    "work": [
+      "battery"
+    ]
+  }
+}

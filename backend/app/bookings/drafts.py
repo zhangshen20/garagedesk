@@ -10,11 +10,15 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ..config import get_settings
 from .source import SiteBooking
 
-# Hourly labour rate in cents, ex-GST. Same demo rate the seed data uses until
-# the owner gives his real one.
-LABOUR_RATE_CENTS = 12000
+# Hourly labour rate in cents, ex-GST, until the shop setting exists everywhere.
+DEFAULT_LABOUR_RATE_CENTS = 12000
+
+
+def labour_rate_cents() -> int:
+    return getattr(get_settings(), "labour_rate_cents", DEFAULT_LABOUR_RATE_CENTS)
 
 # Typical labour for what customers book on the site, used only as a starting
 # suggestion. Keys are matched against the free-text service field.
@@ -57,7 +61,7 @@ def suggested_lines(service: str) -> list[dict[str, Any]]:
                 "kind": "labour",
                 "description": description,
                 "qty": hours,
-                "unit_cents": LABOUR_RATE_CENTS,
+                "unit_cents": labour_rate_cents(),
                 "suggested": True,
             }]
     return []

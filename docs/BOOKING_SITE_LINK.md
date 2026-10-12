@@ -13,7 +13,7 @@ GarageDesk only reads from the site. It never changes a booking there.
 | --- | --- |
 | Booking appears (requested / confirmed) | Copied onto the GarageDesk board with customer and car, `source = "web"` |
 | Car arrives (`checked_in`, or owner taps "start job") | Job card opened, prefilled from the booking: customer, phone, car, rego, booked service, notes, a suggested labour line |
-| Marked `completed` | Job set to done with the booking's details on it, ready to invoice. Nothing is invoiced until the owner confirms the work and price |
+| Marked `completed` | Job set to done with the booking's details and suggested lines, then sent for invoice approval (`services.request_invoice_approval`), so his wife gets the one-tap approval text. Nothing reaches the customer until she approves. A job with no lines worth invoicing stays at done for the owner to say |
 | Declined / cancelled | Local copy cancelled |
 
 Every operation is idempotent: a webhook arriving after a poll, or the same webhook

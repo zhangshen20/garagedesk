@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     model_fast: str = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B"
     model_main: str = "nvidia/nemotron-3-super-120b-a12b"
     model_deep: str = "nvidia/Nemotron-3-Ultra-550b-a55b"
+    # Reads photos of handwritten job cards; Nemotron Super then does the reasoning.
+    model_vision: str = "openbmb/MiniCPM-V-4_5"
     # "nebius" talks to Token Factory; "mock" is a deterministic stand-in used by
     # tests and by the demo when no key is configured.
     llm_mode: str = "auto"  # auto | nebius | mock
@@ -46,6 +48,12 @@ class Settings(BaseSettings):
     bays: int = 3
     owner_name: str = "Shen"
     owner_phone: str = "+61400000000"
+    # Whoever does the books (in the real shop, the owner's wife). Invoices the owner
+    # speaks wait for her one-tap approval unless they are under the auto-send limit.
+    approver_name: str = "the office"
+    approver_phone: str = "+61400000009"
+    auto_approve_invoice_under_cents: int = 0  # inc GST; 0 = she approves every invoice
+    labour_rate_cents: int = 12000  # per hour, ex GST
 
     app_secret: str = "change-me"
     public_base_url: str = "http://localhost:8000"

@@ -238,22 +238,69 @@ def _issue_invoice(s: Session, job_id: int) -> dict[str, Any]:
     j = s.get(Job, int(job_id))
     if not j:
         return {"error": "not found"}
-    inv = svc.issue_invoice(s, j)
-    c = s.get(Customer, j.customer_id)
-    from ..channels.transport import send
-
-    link = f"{get_settings().public_base_url}/api/invoices/{inv.number}/pdf"
-    send(s, Channel.sms, c.phone if c else "", f"Hi {c.name.split()[0] if c else ''}, your {j.title} is done. Tax invoice {inv.number} for ${inv.total_cents / 100:.2f} inc GST: {link} - {get_settings().shop_name}")
+    inv = svc.issue_and_send_invoice(s, j)
+    link = svc.invoice_link(inv)
     return {"number": inv.number, "total_cents": inv.total_cents, "gst_cents": inv.gst_cents, "pdf": link}
 
 
-@tool("record_payment", "Record a payment against an invoice; issues a receipt when paid in full.", {"invoice_number": S, "amount_cents": I, "method": {**S, "enum": ["card", "cash", "transfer"]}}, ["invoice_number", "amount_cents"])
+@tool("record_payment", "Record a payment against an invoice; issues a receipt when paid in full.", {"invoice_number": S, "amount_cents": I, "method": {**S, "enum": ["eftpos", "card", "cash", "transfer"]}}, ["invoice_number", "amount_cents"])
 def _record_payment(s: Session, invoice_number: str, amount_cents: int, method: str = "card") -> dict[str, Any]:
     inv = s.exec(select(Invoice).where(Invoice.number == invoice_number)).first()
     if not inv:
         return {"error": "invoice not found"}
     svc.record_payment(s, inv, int(amount_cents), method)
     return {"number": inv.number, "status": inv.status.value, "receipt": bool(inv.receipt_pdf_path)}
+
+
+@tool(
+    "update_car_status",
+    "The owner says how a car is going ('the Hilux is done', 'Mazda waiting on parts till Thursday'). Finds the job from loose words (rego, make, model or customer name), moves it to the new status and texts the customer.",
+    {"car": {**S, "description": "words identifying the car, e.g. 'Hilux' or 'Maria's Corolla'"}, "status": {**S, "enum": ["in_progress", "waiting_parts", "done"]}, "message": {**S, "description": "anything the customer should hear, e.g. 'part arrives Thursday'"}},
+    ["car", "status"],
+)
+def _update_car_status(s: Session, car: str, status: str, message: str = "") -> dict[str, Any]:
+    from .jobcard import match_open_job
+
+    j = match_open_job(s, car)
+    if not j:
+        return {"error": f"no open job matches '{car}'"}
+    j.status = JobStatus(status)
+    from datetime import datetime
+
+    j.updated_at = datetime.utcnow()
+    v = svc.job_view(s, j)
+    first, model = (v["customer"] or "there").split()[0], " ".join(v["vehicle"].split()[:2]) or "car"
+    body = {
+        "done": f"Hi {first}, your {model} is finished. We'll send the invoice shortly.",
+        "waiting_parts": f"Hi {first}, your {model} is waiting on a part.",
+        "in_progress": f"Hi {first}, we're working on your {model} now.",
+    }[status]
+    if message:
+        body += f" {message.strip().rstrip('.')}."
+    from ..channels.transport import send
+
+    send(s, Channel.sms, v["phone"], f"{body} - {get_settings().shop_trading_name}")
+    svc.log_event(s, "owner", "car_status", f"{model} -> {status}", "job", j.id)
+    return {"job_id": j.id, "customer": v["customer"], "vehicle": v["vehicle"], "status": status, "texted": v["phone"]}
+
+
+@tool(
+    "mark_paid",
+    "Mark a car's invoice paid in full ('Corolla paid on EFTPOS'). Finds the latest unpaid invoice from loose words and texts the customer a receipt.",
+    {"car": S, "method": {**S, "enum": ["eftpos", "cash", "transfer"]}},
+    ["car"],
+)
+def _mark_paid(s: Session, car: str, method: str = "eftpos") -> dict[str, Any]:
+    from .jobcard import match_open_job
+
+    j = match_open_job(s, car, statuses=[JobStatus.invoiced])
+    if not j:
+        return {"error": f"no unpaid invoice matches '{car}'"}
+    inv = s.exec(select(Invoice).where(Invoice.job_id == j.id, Invoice.status == svc.InvoiceStatus.issued)).first()
+    if not inv:
+        return {"error": "invoice not found"}
+    svc.record_payment(s, inv, inv.total_cents, method)
+    return {"number": inv.number, "status": inv.status.value, "method": method, "total_cents": inv.total_cents}
 
 
 @tool("list_unpaid_invoices", "Outstanding invoices and how overdue they are.", {})
@@ -313,7 +360,7 @@ def _money_summary(s: Session, from_day: str = "today", to_day: str = "today") -
 
 
 FRONTDESK_TOOLS = ["shop_info", "find_or_create_customer", "list_availability", "create_booking", "find_booking", "cancel_booking", "reschedule_booking", "get_job_status"]
-BACKOFFICE_TOOLS = ["list_bookings", "list_jobs", "get_job", "add_job_line", "set_job_status", "issue_invoice", "record_payment", "list_unpaid_invoices", "lookup_part_price", "order_parts", "add_expense", "money_summary", "send_sms", "find_or_create_customer", "list_availability", "create_booking"]
+BACKOFFICE_TOOLS = ["update_car_status", "mark_paid", "list_bookings", "list_jobs", "get_job", "add_job_line", "set_job_status", "issue_invoice", "record_payment", "list_unpaid_invoices", "lookup_part_price", "order_parts", "add_expense", "money_summary", "send_sms", "find_or_create_customer", "list_availability", "create_booking"]
 
 
 def _unused(*_: Any) -> None:  # keep imports referenced for type checkers

@@ -250,6 +250,45 @@ export interface ChatReply {
 
 // --- endpoints -----------------------------------------------------------------------
 
+// --- owner app ------------------------------------------------------------------------
+
+export interface OwnerJob extends Job {
+  approval: { id: number; status: "pending" | "approved" | "rejected" } | null;
+}
+
+export interface OwnerResult {
+  kind: "draft" | "reply";
+  ok?: boolean;
+  job?: Job | null;
+  readback: string;
+  warnings?: string[];
+  transcript?: string;
+  paid_method?: string;
+  model?: string;
+}
+
+export interface OwnerToday {
+  shop: string;
+  owner: string;
+  approver: string;
+  jobs: OwnerJob[];
+  arriving: Booking[];
+}
+
+export interface SendResult {
+  status: "awaiting_approval" | "sent" | "already_invoiced";
+  approval_id?: number;
+  approver?: string;
+  invoice_number?: string;
+  total_cents?: number;
+}
+
+export interface ApproveView extends Approval {
+  approver: string;
+  shop: string;
+  job?: Job | null;
+}
+
 export const api = {
   overview: () => get<Overview>("/api/overview"),
 
@@ -282,6 +321,16 @@ export const api = {
   chatCustomer: (text: string, session_id: string, channel: "web" | "sms" | "voice") =>
     post<ChatReply>("/api/chat/customer", { text, session_id, channel }),
   chatOwner: (text: string) => post<ChatReply>("/api/chat/owner", { text }),
+
+  ownerVoice: (text: string) => post<OwnerResult>("/api/owner/voice", { text }),
+  ownerPhoto: (image_b64: string, mime = "image/jpeg") => post<OwnerResult>("/api/owner/photo", { image_b64, mime }),
+  ownerToday: () => get<OwnerToday>("/api/owner/today"),
+  ownerSend: (jobId: number) => post<SendResult>(`/api/owner/jobs/${jobId}/send`),
+  ownerPaid: (jobId: number, method = "eftpos") => post<{ number: string; status: string }>(`/api/owner/jobs/${jobId}/paid`, { method }),
+
+  approveView: (id: number, t: string) => get<ApproveView>(`/api/approve/${id}?t=${encodeURIComponent(t)}`),
+  approveDecide: (id: number, t: string, approve: boolean, note?: string) =>
+    post<ApproveView & { invoice_number?: string }>(`/api/approve/${id}`, { t, approve, note }),
 };
 
 /** Parse the OpenAI-style tool_calls JSON stored on assistant messages. */

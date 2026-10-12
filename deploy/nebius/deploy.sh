@@ -9,6 +9,7 @@
 #   NEBIUS_API_KEY      Token Factory key baked into the VM's .env
 # Optional:
 #   NEBIUS_SUBNET_ID    (auto-picked: first subnet in the project)
+#   SSH_PUBKEY_FILE     (~/.ssh/id_ed25519.pub) authorized for user ubuntu
 #   TAVILY_API_KEY, VM_NAME (garagedesk), PLATFORM (cpu-d3), PRESET (2vcpu-8gb), DISK_GB (20)
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -39,7 +40,10 @@ echo "subnet: $SUBNET_ID"
 
 # --- cloud-init with secrets filled in --------------------------------------------------
 USERDATA=$(mktemp); trap 'rm -f "$USERDATA" "${KEYFILE:-}"' EXIT
-sed -e "s|NEBIUS_API_KEY=REPLACE_ME|NEBIUS_API_KEY=${NEBIUS_API_KEY}|" \
+SSH_PUBKEY_FILE=${SSH_PUBKEY_FILE:-$HOME/.ssh/id_ed25519.pub}
+[[ -f "$SSH_PUBKEY_FILE" ]] || { echo "no SSH public key at $SSH_PUBKEY_FILE (set SSH_PUBKEY_FILE)"; exit 1; }
+sed -e "s|SSH_PUBLIC_KEY|$(cat "$SSH_PUBKEY_FILE")|" \
+    -e "s|NEBIUS_API_KEY=REPLACE_ME|NEBIUS_API_KEY=${NEBIUS_API_KEY}|" \
     -e "s|TAVILY_API_KEY=$|TAVILY_API_KEY=${TAVILY_API_KEY:-}|" cloud-init.yaml > "$USERDATA"
 
 # --- create or reuse the VM -------------------------------------------------------------
@@ -55,7 +59,7 @@ else
     --boot-disk-managed-disk-name "$VM_NAME-boot" --boot-disk-managed-disk-type network_ssd \
     --boot-disk-managed-disk-size-gibibytes "$DISK_GB" \
     --boot-disk-managed-disk-source-image-family-image-family ubuntu24.04-driverless \
-    --boot-disk-attach-mode read_write \
+    --boot-disk-attach-mode READ_WRITE \
     --network-interfaces "[{\"name\":\"eth0\",\"ip_address\":{},\"public_ip_address\":{\"static\":true},\"subnet_id\":\"$SUBNET_ID\"}]" \
     --cloud-init-user-data "$(cat "$USERDATA")" --format json \
     | python3 -c 'import json,sys; print(json.load(sys.stdin)["metadata"]["id"])')

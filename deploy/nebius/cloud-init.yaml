@@ -5,6 +5,12 @@
 #   nebius compute instance create --name garagedesk ... --cloud-init-user-data "$(cat cloud-init.yaml)"
 #
 # Set the two secrets below before use (or inject them via your own secret store).
+users:
+  - name: ubuntu
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - SSH_PUBLIC_KEY
 package_update: true
 packages: [docker.io, docker-compose-v2, git]
 write_files:

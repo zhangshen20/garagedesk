@@ -4,7 +4,7 @@ One small CPU VM (`cpu-d3` / `2vcpu-8gb`, Ubuntu 24.04) runs the Docker image be
 
 ## One-time
 
-1. In the Nebius console note your **project id** (`project-e00…`). Optionally create a **service account** with an authorized key if deploying from CI or a cloud session; a laptop with `nebius` logged in works without one.
+1. In the Nebius console note your **project id** (`project-e00…`). Each region has its own default project; pick one whose `compute.instance.non-gpu.vcpu` quota is above zero (`nebius quotas quota-allowance list --parent-id <tenant-id>`). New tenants get 0 CPU vCPUs in eu-north1 and us-central1, so the demo runs in eu-west1. Billing must be active on the tenant, otherwise every create returns `PermissionDenied`. Optionally create a **service account** with an authorized key if deploying from CI or a cloud session; a laptop with `nebius` logged in works without one.
 2. Run:
 
 ```bash
@@ -18,7 +18,9 @@ bash deploy/nebius/deploy.sh
 
 It prints the public IP. About three minutes later `http://<ip>/` serves the dashboard and `http://<ip>/chat` the customer page.
 
-3. Set `PUBLIC_BASE_URL=http://<ip>` in `/opt/garagedesk/src/.env` on the VM (it goes into the invoice links texted to customers) and run `bash deploy/nebius/redeploy.sh` there once.
+The VM's cloud-init also authorizes `~/.ssh/id_ed25519.pub` (override with `SSH_PUBKEY_FILE`) for user `ubuntu`.
+
+3. Set `PUBLIC_BASE_URL=http://<ip>` in `/opt/garagedesk/src/.env` on the VM (it goes into the invoice links texted to customers) and run `sudo bash deploy/nebius/redeploy.sh` there once (the `.env` and checkout are root-owned).
 
 ## Updates
 

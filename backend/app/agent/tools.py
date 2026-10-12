@@ -303,6 +303,39 @@ def _mark_paid(s: Session, car: str, method: str = "eftpos") -> dict[str, Any]:
     return {"number": inv.number, "status": inv.status.value, "method": method, "total_cents": inv.total_cents}
 
 
+@tool(
+    "find_jobs",
+    "Find jobs from what the owner said: a day or period in his words ('yesterday', 'Friday', 'last week'), car words (rego, make, model), customer name, and/or status. Returns matches with their day, status and invoice, or the nearest jobs if none match.",
+    {
+        "when": {**S, "description": "day or period as he said it, e.g. 'yesterday', 'last Friday', 'this week'; empty for any day"},
+        "car": {**S, "description": "rego, make or model words, e.g. 'Hyundai' or 'ABC123'"},
+        "customer": S,
+        "status": {**S, "enum": ["to_invoice", "unpaid", "paid", "done", "in_progress", "waiting_parts", ""]},
+    },
+)
+def _find_jobs(s: Session, when: str = "", car: str = "", customer: str = "", status: str = "") -> dict[str, Any]:
+    from .joblookup import search_jobs, spoken_list
+
+    found = search_jobs(s, when=when, car=car, customer=customer, status=status)
+    # a ready-to-say summary, so the spoken reply needs no ids
+    return {**found, "say": spoken_list(found)}
+
+
+@tool(
+    "prepare_invoice",
+    "Get the invoice ready for a job that is already in the system (use a job_id from find_jobs). The owner sees it and taps Send; the office approves before the customer gets it.",
+    {"job_id": I},
+    ["job_id"],
+)
+def _prepare_invoice(s: Session, job_id: int) -> dict[str, Any]:
+    from .joblookup import prepare_invoice
+
+    j = s.get(Job, int(job_id))
+    if not j:
+        return {"ok": False, "error": "job not found", "readback": "I couldn't find that job."}
+    return prepare_invoice(s, j)
+
+
 @tool("list_unpaid_invoices", "Outstanding invoices and how overdue they are.", {})
 def _list_unpaid(s: Session) -> dict[str, Any]:
     u = svc.unpaid_invoices(s)
@@ -348,19 +381,19 @@ def _add_expense(s: Session, description: str, amount_cents: int, category: str 
 
 @tool("money_summary", "Cash in/out and GST collected over a date range.", {"from_day": S, "to_day": S})
 def _money_summary(s: Session, from_day: str = "today", to_day: str = "today") -> dict[str, Any]:
-    from datetime import datetime, time
-
     from ..models import Expense, Payment
 
-    a, b = svc.parse_day(from_day), svc.parse_day(to_day)
-    pays = s.exec(select(Payment).where(Payment.paid_at >= datetime.combine(a, time.min), Payment.paid_at <= datetime.combine(b, time.max))).all()
+    a, b = svc.parse_day(from_day, past=True), svc.parse_day(to_day, past=True)
+    lo, hi = svc.utc_bounds(a, b)
+    pays = s.exec(select(Payment).where(Payment.paid_at >= lo, Payment.paid_at <= hi)).all()
     exps = s.exec(select(Expense).where(Expense.day >= a, Expense.day <= b)).all()
-    invs = s.exec(select(Invoice).where(Invoice.issued_at >= datetime.combine(a, time.min), Invoice.issued_at <= datetime.combine(b, time.max))).all()
+    invs = s.exec(select(Invoice).where(Invoice.issued_at >= lo, Invoice.issued_at <= hi)).all()
     return {"from": a.isoformat(), "to": b.isoformat(), "cash_in_cents": sum(p.amount_cents for p in pays), "cash_out_cents": sum(e.amount_cents for e in exps), "gst_collected_cents": sum(i.gst_cents for i in invs), "gst_paid_cents": sum(e.gst_cents for e in exps), "invoices_issued": len(invs)}
 
 
+OWNER_APP_TOOLS = ["find_jobs", "prepare_invoice", "update_car_status", "mark_paid", "list_bookings", "list_jobs", "get_job", "list_unpaid_invoices", "lookup_part_price", "order_parts", "add_expense", "money_summary", "find_or_create_customer", "list_availability", "create_booking"]
 FRONTDESK_TOOLS = ["shop_info", "find_or_create_customer", "list_availability", "create_booking", "find_booking", "cancel_booking", "reschedule_booking", "get_job_status"]
-BACKOFFICE_TOOLS = ["update_car_status", "mark_paid", "list_bookings", "list_jobs", "get_job", "add_job_line", "set_job_status", "issue_invoice", "record_payment", "list_unpaid_invoices", "lookup_part_price", "order_parts", "add_expense", "money_summary", "send_sms", "find_or_create_customer", "list_availability", "create_booking"]
+BACKOFFICE_TOOLS = ["find_jobs", "update_car_status", "mark_paid", "list_bookings", "list_jobs", "get_job", "add_job_line", "set_job_status", "issue_invoice", "record_payment", "list_unpaid_invoices", "lookup_part_price", "order_parts", "add_expense", "money_summary", "send_sms", "find_or_create_customer", "list_availability", "create_booking"]
 
 
 def _unused(*_: Any) -> None:  # keep imports referenced for type checkers

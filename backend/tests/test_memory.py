@@ -3,35 +3,6 @@
 from app.agent import knowhow
 
 
-def _outbox(client):
-    return client.get("/api/outbox").json()["outbox"]
-
-
-def test_send_it_after_a_read_back_sends_that_job(client):
-    d = client.post("/api/owner/voice", json={"text": "Corolla ABC123 done, front pads, hour and a half labour"}).json()
-    assert d["ok"] and "Send it?" in d["readback"]
-    r = client.post("/api/owner/voice", json={"text": "Yep, send it"}).json()
-    assert r["kind"] == "follow_up" and r["send"]["status"] == "awaiting_approval"
-    assert r["job"]["job_id"] == d["job"]["job_id"]
-    assert any("/approve/" in o["body"] for o in _outbox(client))
-    # saying it again doesn't send twice
-    again = client.post("/api/owner/voice", json={"text": "send it"}).json()
-    assert again["kind"] != "follow_up"
-
-
-def test_send_it_with_nothing_drafted_is_not_guessed(client):
-    r = client.post("/api/owner/voice", json={"text": "send it"}).json()
-    assert r["kind"] == "reply"
-    assert not any("/approve/" in o["body"] for o in _outbox(client))
-
-
-def test_draft_needing_a_fix_is_not_sent_on_yes(client):
-    d = client.post("/api/owner/voice", json={"text": "CX-5 1KR9ZZ done, replaced the wiper blades"}).json()
-    assert d["ok"] and d["warnings"]
-    r = client.post("/api/owner/voice", json={"text": "yes"}).json()
-    assert r["kind"] != "follow_up"
-
-
 def test_context_carries_turns_focus_and_history(client):
     from app.agent import memory
     from app.db import session_scope
@@ -67,20 +38,6 @@ def test_remember_and_recall_tools(client):
         assert run_tool(s, "shop_knowhow", {"topic": "timing belt"})["jobs"]
 
 
-def test_owner_turns_go_to_todays_transcript(client):
-    from sqlmodel import select
-
-    from app.agent import memory
-    from app.db import session_scope
-    from app.models import Message
-
-    client.post("/api/owner/voice", json={"text": "Corolla ABC123 done, front pads, hour and a half labour"})
-    with session_scope() as s:
-        conv = memory.owner_conversation(s)
-        said = [m.content for m in s.exec(select(Message).where(Message.conversation_id == conv.id)).all()]
-        assert any("hour and a half" in m for m in said)
-
-
 def test_knowhow_understands_shop_talk():
     assert knowhow.cars_in("did the pads on the high lux") == ["Toyota Hilux"]
     assert knowhow.cars_in("eye thirty in bay two") == ["Hyundai i30"]
@@ -102,13 +59,3 @@ def test_correction_keeps_what_he_said_before(client):
         assert memory.amend_text(s, "add wipers to that").startswith("Corolla ABC123 done")
         assert "380 all up" in memory.amend_text(s, "add wipers to that")
         assert memory.amend_text(s, "what's on today") is None
-
-
-def test_unpriced_line_is_not_sent(client):
-    from app.agent.tools import run_tool
-    from app.db import session_scope
-
-    d = client.post("/api/owner/voice", json={"text": "CX-5 1KR9ZZ done, replaced the wiper blades and a mystery bracket, half hour labour"}).json()
-    with session_scope() as s:
-        r = run_tool(s, "send_invoice_for_approval", {"job_id": d["job"]["job_id"]})
-    assert "error" in r or all(l["unit_cents"] for l in d["job"]["lines"])

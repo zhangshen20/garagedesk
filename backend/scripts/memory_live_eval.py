@@ -11,8 +11,8 @@ import json
 import os
 import sys
 import time
-from datetime import date, timedelta
 from collections.abc import Callable
+from datetime import date, timedelta
 from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -24,7 +24,17 @@ from sqlmodel import Session, select
 
 from app.config import get_settings
 from app.db import get_engine
-from app.models import Customer, Invoice, InvoiceStatus, Job, JobStatus, OwnerFact, PurchaseOrder, Vehicle
+from app.models import (
+    Approval,
+    Customer,
+    Invoice,
+    InvoiceStatus,
+    Job,
+    JobStatus,
+    OwnerFact,
+    PurchaseOrder,
+    Vehicle,
+)
 
 if not get_settings().nebius_api_key:
     sys.exit("NEBIUS_API_KEY not set")
@@ -49,12 +59,13 @@ def draft_for(rego: str, total: int | None = None) -> Check:
     return chk
 
 
-def sent() -> Check:
+def sent(rego: str) -> Check:
+    """His invoice went to the approver (or straight out): an invoice approval or an invoice exists for the car's latest job."""
+
     def chk(r: dict[str, Any], s: Session) -> str | None:
-        st = (r.get("send") or {}).get("status")
-        if st in ("awaiting_approval", "sent"):
-            return None
-        if any(x.get("tool") == "send_invoice_for_approval" and (x.get("result") or {}).get("status") in ("awaiting_approval", "sent") for x in r.get("steps") or []):
+        v = s.exec(select(Vehicle).where(Vehicle.rego == rego)).first()
+        j = s.exec(select(Job).where(Job.vehicle_id == v.id).order_by(Job.updated_at.desc())).first() if v else None  # type: ignore[attr-defined]
+        if j and (s.exec(select(Approval).where(Approval.kind == "invoice", Approval.ref_id == j.id)).first() or j.status in (JobStatus.invoiced, JobStatus.paid)):
             return None
         return f"not sent: kind={r.get('kind')} {r.get('readback', '')[:80]}"
 
@@ -126,16 +137,16 @@ CONVERSATIONS: list[tuple[str, list[tuple[str, list[Check]]]]] = [
     ("Correct the total, then send", [
         ("Corolla ABC123, front pads, hour and a half, 350 all up", [draft_for("ABC123", 35000)]),
         ("actually make it 380 all up", [draft_for("ABC123", 38000), has_part("pad")]),
-        ("yep send it", [sent()]),
+        ("yep send it", [sent("ABC123")]),
     ]),
     ("Status, then invoice 'it', then send", [
         ("the CX-5's done, roadworthy passed", [job_status("1KR9ZZ", JobStatus.done), not_draft]),
         ("make the invoice for it, hour of labour, 150 all up", [draft_for("1KR9ZZ", 15000)]),
-        ("send it", [sent()]),
+        ("send it", [sent("1KR9ZZ")]),
     ]),
     ("Same as last time", [
         ("Liam's Ranger, did the battery again, same as last time", [draft_for("LOC777", 36600), has_part("battery")]),
-        ("good, send it", [sent()]),
+        ("good, send it", [sent("LOC777")]),
     ]),
     ("Customer history questions", [
         ("when was Maria's Corolla last in and what did we do", [says("logbook", "service")]),
@@ -150,13 +161,13 @@ CONVERSATIONS: list[tuple[str, list[tuple[str, list[Check]]]]] = [
     ("Misheard car, booked today, part priced by him", [
         ("the civic in for the engine light, scanned it, replaced a coil pack, half hour labour, coil pack 95", [draft_for("AH5566"), has_part("coil")]),
         ("what should I check while it's in", [not_draft, says_not("coil pack 95 dollars")]),
-        ("ok send that one", [sent()]),
+        ("ok send that one", [sent("AH5566")]),
     ]),
     ("Never invents parts, then adds what he says", [
         ("Sofia's Cerato logbook service done, hour and a half", [draft_for("SR2020"), labour_hours(1.5), no_invented_parts]),
         ("add oil and a filter to that", [draft_for("SR2020"), labour_hours(1.5), has_part("oil")]),
         # the filter has no price for a Kia on file: it must ask, not look one up and send
-        ("send it", [lambda r, s: None if sent()(r, s) else "sent with an unpriced line", says("price", "charge", "how much")]),
+        ("send it", [lambda r, s: None if sent("SR2020")(r, s) else "sent with an unpriced line", says("price", "charge", "how much")]),
     ]),
     ("Unknown car: ask, then use his answer", [
         ("the Golf's done, two hours", [not_draft, no_new_customer]),

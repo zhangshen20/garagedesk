@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 from datetime import date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -44,32 +45,86 @@ def today() -> date:
     return datetime.now(ZoneInfo(get_settings().shop_timezone)).date()
 
 
-def parse_day(value: str | date | None) -> date:
+_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+_NUMBERS = {"one": 1, "a": 1, "an": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7}
+
+
+def parse_day(value: str | date | None, *, past: bool = False) -> date:
+    """A day as people say it, in the shop's time zone. `past` decides what a bare
+    weekday means: "Friday" is the coming Friday for a booking (past=False) and the
+    Friday just gone when he's asking about work already done (past=True)."""
     if isinstance(value, date):
         return value
-    v = (value or "today").strip().lower()
-    if v in ("today", ""):
-        return today()
+    v = re.sub(r"[^a-z0-9/\- ]", "", (value or "today").strip().lower().replace("'s", ""))
+    v = re.sub(r"\s+", " ", v).strip()
+    t = today()
+    if v in ("", "today", "this morning", "this arvo", "this afternoon", "tonight", "now", "earlier", "earlier today", "this evening"):
+        return t
+    if v in ("yesterday", "yday", "last night", "yesterday morning", "yesterday afternoon", "yesterday arvo"):
+        return t - timedelta(days=1)
+    if v in ("day before yesterday", "the day before yesterday"):
+        return t - timedelta(days=2)
     if v == "tomorrow":
-        return today() + timedelta(days=1)
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d %B %Y", "%d %b %Y", "%d %B", "%d %b"):
+        return t + timedelta(days=1)
+    m = re.fullmatch(r"(\d+|one|two|three|four|five|six|seven|a|an) days? ago", v)
+    if m:
+        n = int(m.group(1)) if m.group(1).isdigit() else _NUMBERS[m.group(1)]
+        return t - timedelta(days=n)
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d/%m", "%d %B %Y", "%d %b %Y", "%d %B", "%d %b"):
         try:
             d = datetime.strptime(v, fmt).date()
             if d.year == 1900:
-                d = d.replace(year=today().year)
-                if d < today():
-                    d = d.replace(year=today().year + 1)
+                d = d.replace(year=t.year)
+                if past and d > t:
+                    d = d.replace(year=t.year - 1)
+                elif not past and d < t:
+                    d = d.replace(year=t.year + 1)
             return d
         except ValueError:
             continue
-    weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-    for i, name in enumerate(weekdays):
-        if name.startswith(v[:3]):
-            d = today()
-            while d.weekday() != i or d <= today():
-                d += timedelta(days=1)
-            return d
+    m = re.fullmatch(r"(last|this|next|on|this past|past)? ?([a-z]+?)(?: just gone| gone)?", v)
+    if m and len(m.group(2)) >= 3:
+        word, lead = m.group(2), (m.group(1) or "")
+        for i, name in enumerate(_WEEKDAYS):
+            if name.startswith(word[:3]) and (name.startswith(word) or word.startswith(name[:3])):
+                back = lead in ("last", "past", "this past") or v.endswith("gone") or (past and lead not in ("next",))
+                d = t
+                if back:
+                    d -= timedelta(days=1)
+                    while d.weekday() != i:
+                        d -= timedelta(days=1)
+                else:
+                    d += timedelta(days=1)
+                    while d.weekday() != i:
+                        d += timedelta(days=1)
+                return d
     raise ValueError(f"Unrecognised date: {value!r}")
+
+
+def utc_bounds(a: date, b: date) -> tuple[datetime, datetime]:
+    """Start of day a to end of day b in the shop's time zone, as naive UTC (how
+    timestamps are stored)."""
+    tz, utc = ZoneInfo(get_settings().shop_timezone), ZoneInfo("UTC")
+    lo = datetime.combine(a, time.min, tzinfo=tz).astimezone(utc).replace(tzinfo=None)
+    hi = datetime.combine(b, time.max, tzinfo=tz).astimezone(utc).replace(tzinfo=None)
+    return lo, hi
+
+
+def parse_period(value: str | None) -> tuple[date, date]:
+    """A day or a span ("this week", "last week", "the last few days"), inclusive."""
+    v = re.sub(r"\s+", " ", (value or "").strip().lower())
+    t = today()
+    monday = t - timedelta(days=t.weekday())
+    if v in ("this week", "the week"):
+        return monday, t
+    if v in ("last week", "the week before"):
+        return monday - timedelta(days=7), monday - timedelta(days=1)
+    if v in ("last few days", "the last few days", "past few days", "recently", "lately", "this past week", "past week", "the past week", "last 7 days"):
+        return t - timedelta(days=7), t
+    if v in ("this month",):
+        return t.replace(day=1), t
+    d = parse_day(v, past=True)
+    return d, d
 
 
 def parse_time(value: str | time) -> time:

@@ -3,7 +3,7 @@ cars he mentions, put in front of the model every time he talks.
 
 Two layers:
   short term  every turn (what he said, what we did, which job) in OwnerTurn, so
-              "send it", "that one", "make it 380 all up" or "the CX-5 I did this
+              "that one", "make it 380 all up" or "the CX-5 I did this
               morning" resolve to a job.
   long term   the shop's own records for each car he names: past visits with their
               lines and totals, notes left on jobs, and facts he asked us to keep
@@ -27,14 +27,11 @@ from ..config import get_settings
 from ..models import (
     Booking,
     BookingStatus,
-    Channel,
-    Conversation,
     Customer,
     Invoice,
     InvoiceStatus,
     Job,
     JobStatus,
-    Message,
     OwnerFact,
     OwnerTurn,
     Vehicle,
@@ -43,16 +40,8 @@ from . import knowhow
 
 RECENT_TURNS = 10
 RECENT_DAYS = 3
-FOCUS_HOURS = 12  # "send it" refers to a job he talked about since this morning, not last week
+FOCUS_HOURS = 12  # "that one" means to a job he talked about since this morning, not last week
 HISTORY_VISITS = 3
-
-# Short confirmations after "Send it?": the whole utterance, nothing more.
-_SEND_IT = re.compile(
-    r"^(?:(?:yes|yep|yeah|yup|ok|okay|sure|righto|good|sweet|perfect|correct|that's right|thats right|all good)[\s,.!]*)*"
-    r"(?:(?:please\s+)?(?:send(?: it| that| that one| it off| it through| it to her| it to (?:the )?(?:wife|missus))?|go ahead|do it|go for it|approve it)[\s,.!]*(?:please|mate|thanks)?[\s,.!]*)?$",
-    re.IGNORECASE,
-)
-
 
 # --- time -------------------------------------------------------------------------------
 
@@ -80,20 +69,13 @@ def _dollars(cents: int) -> str:
 # --- short term: turns and the job he's on -------------------------------------------------
 
 
-def owner_conversation(s: Session) -> Conversation:
-    """One back-office transcript per day, so yesterday's "the Corolla is done" never
-    reads as today's. Earlier days reach the model through owner_context instead."""
-    from .frontdesk import get_or_create_conversation
-
-    conv = get_or_create_conversation(s, Channel.owner, f"owner-{svc.today().isoformat()}")
-    conv.updated_at = datetime.utcnow()
-    return conv
-
-
 def _job_from(out: dict[str, Any]) -> int | None:
     job = out.get("job") or {}
     if job.get("job_id"):
         return int(job["job_id"])
+    jobs = out.get("jobs") or []
+    if len(jobs) == 1 and jobs[0].get("job_id"):
+        return int(jobs[0]["job_id"])
     for st in reversed(out.get("steps") or []):
         r = st.get("result") or {}
         if isinstance(r, dict) and r.get("job_id"):
@@ -108,8 +90,7 @@ def _job_from(out: dict[str, Any]) -> int | None:
 
 
 def remember_turn(s: Session, said: str, out: dict[str, Any]) -> OwnerTurn:
-    """Record what he said and what came of it. Drafts also go into today's back-office
-    transcript, so a later "mark it paid" or "what did I just do" has them in view."""
+    """Record what he said and what came of it, and which job it was about."""
     job_id = _job_from(out)
     job = s.get(Job, job_id) if job_id else None
     outcome = str(out.get("readback") or "")
@@ -118,11 +99,6 @@ def remember_turn(s: Session, said: str, out: dict[str, Any]) -> OwnerTurn:
     described = str(out.get("described") or said) if kind == "draft" else ""
     t = OwnerTurn(said=said, kind=kind, outcome=outcome[:600], ready=ready, described=described[:1000], job_id=job.id if job else None, customer_id=job.customer_id if job else None)
     s.add(t)
-    if t.kind != "reply":
-        conv = owner_conversation(s)
-        note = f" [job {job.id}]" if job else ""
-        s.add(Message(conversation_id=conv.id, role="user", content=said))
-        s.add(Message(conversation_id=conv.id, role="assistant", content=outcome + note))
     s.flush()
     return t
 
@@ -159,35 +135,6 @@ def amend_text(s: Session, text: str) -> str | None:
     if others or other_cars or "waiting" in text.lower():
         return None
     return f"{last[-1].described}\nThen he corrected it: {text}"
-
-
-def is_send_it(text: str) -> bool:
-    t = text.strip()
-    return bool(t) and len(t) < 60 and bool(_SEND_IT.match(t)) and bool(re.search(r"[a-z]", t, re.I))
-
-
-def follow_up(s: Session, text: str) -> dict[str, Any] | None:
-    """Handle "yep, send it" straight after a draft read-back without another model call.
-    Only when the job he's on is a finished draft with lines that hasn't gone yet."""
-    if not is_send_it(text):
-        return None
-    job = focus_job(s)
-    last = recent_turns(s, 1)
-    if not job or not last or last[-1].job_id != job.id or not last[-1].ready:
-        return None
-    view = svc.job_view(s, job)
-    if job.status != JobStatus.done or not view["lines"]:
-        return None
-    r = svc.request_invoice_approval(s, job)
-    first = (view["customer"] or "the customer").split()[0]
-    who = get_settings().approver_name or "the books"
-    if r.get("status") == "awaiting_approval":
-        say = f"Sent {first}'s invoice to {who} to approve."
-    elif r.get("status") == "sent":
-        say = f"Invoice sent to {first}."
-    else:
-        say = f"{first}'s invoice has already gone."
-    return {"kind": "follow_up", "ok": True, "readback": say, "job": svc.job_view(s, job), "send": r, "model": "memory"}
 
 
 # --- long term: the cars he mentions -------------------------------------------------------
@@ -332,7 +279,7 @@ def owner_context(s: Session, text: str, *, for_extract: bool = False) -> str:
     if focus:
         view = svc.job_view(s, focus)
         parts.append(
-            f"The job he is on now (what \"it\", \"that one\" or \"send it\" mean): job {focus.id}, {view['customer']}'s {view['vehicle']}, "
+            f"The job he is on now (what \"it\" or \"that one\" mean): job {focus.id}, {view['customer']}'s {view['vehicle']}, "
             f"{focus.status.value.replace('_', ' ')}"
             + ("." if for_extract else f"; {_lines_said(view)}; total {_dollars(view['total_cents'])} inc GST.")
         )

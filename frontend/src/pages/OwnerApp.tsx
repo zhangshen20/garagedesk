@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, Check, CircleDollarSign, Clock, Loader2, Mic, RotateCcw, Send, Square, Volume2, Wrench } from "lucide-react";
 import { api, type OwnerJob, type OwnerResult, type OwnerToday } from "../api";
 import { money } from "../format";
+import { plain, setServerVoice, speak, stopSpeech, unlockSpeech } from "../voice";
 
 // --- speech in and out -----------------------------------------------------------------
 
@@ -76,22 +77,6 @@ function standalone(): boolean {
   return Boolean(n.standalone) || window.matchMedia?.("(display-mode: standalone)").matches;
 }
 
-function plain(text: string): string {
-  return text.replace(/[*_`#>]/g, "").replace(/\s+/g, " ").trim();
-}
-
-function speak(text: string) {
-  try {
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(plain(text));
-    u.lang = "en-AU";
-    u.rate = 1;
-    window.speechSynthesis.speak(u);
-  } catch {
-    /* no speech synthesis: the text is on screen */
-  }
-}
-
 /** Why the iPhone wouldn't listen, in words he can act on. */
 function micProblem(code: string): string {
   if (code === "no-speech") return "I didn't hear anything. Tap the button and talk again.";
@@ -126,16 +111,6 @@ function setFlag(key: string, on: boolean) {
 
 const prefersTyping = () => flag(TYPE_KEY);
 const rememberTyping = (on: boolean) => setFlag(TYPE_KEY, on);
-
-/** iOS only lets a page speak after a tap; say nothing once inside the first tap. */
-function unlockSpeech() {
-  try {
-    const u = new SpeechSynthesisUtterance("");
-    window.speechSynthesis.speak(u);
-  } catch {
-    /* ignore */
-  }
-}
 
 async function shrinkPhoto(file: File): Promise<string> {
   const url = URL.createObjectURL(file);
@@ -195,8 +170,22 @@ export default function OwnerApp() {
   const stopOnTap = useRef(false);
   const pressFails = useRef(flag(PRESS_KEY));
 
+  // the last offer already heard: a new one ("Jenny approved the Corolla") is said once
+  const heardOffer = useRef<number | null | undefined>(undefined);
   const refresh = useCallback(() => {
-    api.ownerToday().then(setToday).catch(() => undefined);
+    api
+      .ownerToday()
+      .then((t) => {
+        setToday(t);
+        setServerVoice(t.tts !== false);
+        const o = t.offer ?? null;
+        if (heardOffer.current === undefined) heardOffer.current = o?.id ?? null; // opened the page: don't replay old news
+        else if (o && o.id !== heardOffer.current) {
+          heardOffer.current = o.id;
+          if (o.action !== "send") void speak(o.say); // "send" offers arrive with their own read-back
+        }
+      })
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -218,7 +207,7 @@ export default function OwnerApp() {
     if (perms) perms.query({ name: "microphone" }).then((p) => report(p.state), () => report("unknown"));
     else report("no-permissions-api");
     refresh();
-    const t = setInterval(refresh, 10000);
+    const t = setInterval(refresh, 5000); // news from the approver is said within seconds
     return () => clearInterval(t);
   }, [refresh]);
 
@@ -239,7 +228,8 @@ export default function OwnerApp() {
     try {
       const r = await api.ownerVoice(t);
       setResult(r);
-      speak(r.readback);
+      if (r.offer) heardOffer.current = r.offer.id;
+      speak(r.say || r.readback);
       refresh();
     } catch (e) {
       setResult({ kind: "reply", readback: "Sorry, something went wrong. Try again." });
@@ -250,7 +240,8 @@ export default function OwnerApp() {
   }
 
   function startListening(by: "press" | "tap") {
-    window.speechSynthesis?.cancel();
+    stopSpeech();
+    unlockSpeech();
     const rec = makeRecognition();
     if (!rec) {
       diag("no-speech-api");
@@ -377,7 +368,8 @@ export default function OwnerApp() {
   }
 
   async function startRecording(by: "press" | "tap") {
-    window.speechSynthesis?.cancel();
+    stopSpeech();
+    unlockSpeech();
     recording.current = true;
     startedBy.current = by;
     startedOk.current = false;
@@ -471,7 +463,8 @@ export default function OwnerApp() {
       const r = await api.ownerAudio(blob);
       setHeard(r.heard ?? r.transcript ?? "");
       setResult(r);
-      speak(r.readback);
+      if (r.offer) heardOffer.current = r.offer.id;
+      speak(r.say || r.readback);
       refresh();
     } catch (e) {
       const status = (e as { status?: number }).status;
@@ -533,8 +526,9 @@ export default function OwnerApp() {
       const b64 = await shrinkPhoto(f);
       const r = await api.ownerReceipt(jobId, b64);
       setResult(r);
+      if (r.offer) heardOffer.current = r.offer.id;
       setHeard(r.transcript ? `Receipt says: ${r.transcript.replace(/\n/g, " · ")}` : "");
-      speak(r.readback);
+      speak(r.say || r.readback);
       refresh();
     } catch {
       setResult({ kind: "draft", ok: false, readback: "I couldn't read that receipt. Try again with the whole receipt in view." });
@@ -544,13 +538,14 @@ export default function OwnerApp() {
   }
 
   async function send(jobId: number) {
+    unlockSpeech();
     setBusyJob(jobId);
     try {
       const r = await api.ownerSend(jobId);
       const who = today?.approver ?? "the office";
       const msg = r.status === "sent" ? `Invoice ${r.invoice_number} sent to the customer.` : r.status === "already_invoiced" ? "Already invoiced." : `Sent to ${who} to approve.`;
       setToast(msg);
-      speak(msg);
+      void speak(r.status === "sent" ? "Invoice sent to the customer." : r.status === "already_invoiced" ? "Already invoiced." : `Sent to ${who}.`);
       setResult(null);
       refresh();
     } catch (e) {
@@ -561,12 +556,13 @@ export default function OwnerApp() {
   }
 
   async function paid(jobId: number) {
+    unlockSpeech();
     setBusyJob(jobId);
     try {
       const r = await api.ownerPaid(jobId, "eftpos");
       const msg = `Paid on EFTPOS. Receipt sent for ${r.number}.`;
       setToast(msg);
-      speak("Paid. Receipt sent.");
+      void speak("Paid on EFTPOS. Receipt sent.");
       refresh();
     } catch (e) {
       setToast(String((e as Error).message || e));
@@ -665,10 +661,17 @@ export default function OwnerApp() {
         {result && (
           <section className="mt-4 rounded-3xl bg-white p-5 text-slate-900 shadow-float">
             <div className="flex items-start gap-3">
-              <button type="button" aria-label="Read it again" onClick={() => speak(result.readback)} className="mt-0.5 shrink-0 rounded-full bg-slate-100 p-2 text-slate-600">
+              <button type="button" aria-label="Say it again" onClick={() => void speak(result.say || result.readback)} className="mt-0.5 shrink-0 rounded-full bg-slate-100 p-2 text-slate-600">
                 <Volume2 size={20} />
               </button>
-              <p className="text-lg font-medium leading-snug">{plain(result.readback)}</p>
+              <div>
+                <p className="text-lg font-medium leading-snug">{plain(result.readback)}</p>
+                {result.say_full && result.say && result.say_full !== result.say && (
+                  <button type="button" onClick={() => void speak(result.say_full!)} className="mt-1 text-sm font-semibold text-brand-700 underline underline-offset-4">
+                    Hear every line
+                  </button>
+                )}
+              </div>
             </div>
             {draft && (
               <>
@@ -716,9 +719,46 @@ export default function OwnerApp() {
                     <RotateCcw />
                   </button>
                 </div>
-                <p className="mt-2 text-center text-sm text-slate-500">Goes to {today?.approver ?? "the office"} to check, then to the customer.</p>
+                <p className="mt-2 text-center text-sm text-slate-500">
+                  Say “yes” or tap Send. Goes to {today?.approver ?? "the office"} to check, then to the customer.
+                </p>
               </>
             )}
+          </section>
+        )}
+
+        {/* news he was told out loud, and the step it offers ("say yes when they've paid") */}
+        {today?.offer && today.offer.action !== "send" && (
+          <section className="mt-4 rounded-3xl bg-amber-50 p-5 text-slate-900 shadow-float">
+            <div className="flex items-start gap-3">
+              <button type="button" aria-label="Say it again" onClick={() => void speak(today.offer!.say)} className="mt-0.5 shrink-0 rounded-full bg-amber-100 p-2 text-amber-900">
+                <Volume2 size={20} />
+              </button>
+              <p className="text-lg font-medium leading-snug">{today.offer.say}</p>
+            </div>
+            <div className="mt-4 grid grid-cols-[1fr_auto] gap-3">
+              {today.offer.action === "paid" && today.offer.job_id !== null ? (
+                <button
+                  type="button"
+                  onClick={() => void paid(today.offer!.job_id!)}
+                  disabled={busyJob === today.offer.job_id}
+                  className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-lg font-semibold text-white disabled:opacity-50"
+                >
+                  <CircleDollarSign size={20} /> Paid EFTPOS
+                </button>
+              ) : (
+                <span />
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  void api.ownerVoice("no").then(refresh, refresh);
+                }}
+                className="h-14 rounded-2xl bg-slate-200 px-5 text-base font-semibold text-slate-700"
+              >
+                {today.offer.action === "paid" ? "Not yet" : "OK"}
+              </button>
+            </div>
           </section>
         )}
 

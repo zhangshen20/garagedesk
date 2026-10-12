@@ -16,6 +16,7 @@ app/agent/owner_app.py
 app/agent/parts_lookup.py
 app/agent/report.py
 app/agent/runner.py
+app/agent/stt.py
 app/agent/tools.py
 app/api/__init__.py
 app/api/routes.py

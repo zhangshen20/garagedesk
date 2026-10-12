@@ -78,6 +78,7 @@ class NebiusLLM:
         temperature: float = 0.2,
         max_tokens: int = 1200,
         json_mode: bool = False,
+        think: bool = True,
     ) -> LLMReply:
         model = model_for(tier)
         kwargs: dict[str, Any] = dict(
@@ -88,9 +89,10 @@ class NebiusLLM:
             kwargs["tool_choice"] = "auto"
         if json_mode:
             kwargs["response_format"] = {"type": "json_object"}
-        if tier == "fast":
+        if tier == "fast" or not think:
             # Nano's hidden reasoning otherwise eats the token budget on one-shot
-            # extraction jobs and returns an empty or truncated answer.
+            # extraction jobs and returns an empty or truncated answer. Super without
+            # reasoning fills the job card JSON in about a second instead of 4-7.
             kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
         resp = self.client.chat.completions.create(**kwargs)
         choice = resp.choices[0].message
@@ -154,6 +156,7 @@ class MockLLM:
         temperature: float = 0.2,
         max_tokens: int = 1200,
         json_mode: bool = False,
+        think: bool = True,
     ) -> LLMReply:
         model = f"mock/{model_for(tier).split('/')[-1]}"
         tool_names = {t["function"]["name"] for t in tools or []}
@@ -197,8 +200,8 @@ class MockLLM:
             return say(json.dumps(_mock_job_card(text)))
 
         if json_mode and "owner" in system.lower() and "intent" in system.lower():
-            work = any(k in text for k in ("labour", "hour", "hr", "pads", "oil", "filter", "service", "replaced", "fitted"))
-            return say(json.dumps({"intent": "job_card" if work and "order" not in text and "need" not in text else "other"}))
+            last_reply = next((m["content"] for m in reversed(messages[:-1]) if m["role"] == "assistant"), "")
+            return say(json.dumps(_mock_owner_route(text, last_reply)))
 
         if "daily report" in system.lower() or tier == "deep":
             return say(_mock_report(messages))
@@ -247,12 +250,18 @@ class MockLLM:
                 return say(
                     f"Tax invoice {inv.get('number')} issued for ${inv.get('total_cents', 0) / 100:.2f} inc GST and sent to the customer."
                 )
-            if ("today" in text or "schedule" in text or "bays" in text) and "list_bookings" in tool_names:
+            if ("how much" in text or "take" in text or "made" in text) and "money_summary" in tool_names:
+                if "money_summary" not in done:
+                    day = "yesterday" if "yesterday" in text else "today"
+                    return call("money_summary", from_day=day, to_day=day)
+                m = results.get("money_summary", {})
+                return say(f"${m.get('cash_in_cents', 0) / 100:,.2f} came in, ${m.get('cash_out_cents', 0) / 100:,.2f} went out.")
+            if ("today" in text or "tomorrow" in text or "schedule" in text or "bays" in text or "coming in" in text) and "list_bookings" in tool_names:
                 if "list_bookings" not in done:
-                    return call("list_bookings", day="today")
+                    return call("list_bookings", day="tomorrow" if "tomorrow" in text else "today")
                 bl = results.get("list_bookings", {}).get("bookings", [])
                 lines = [f"- {b['start']} bay {b['bay']}: {b['customer']} ({b['vehicle']}) {b['service']}" for b in bl]
-                return say("Today's board:\n" + ("\n".join(lines) if lines else "No bookings."))
+                return say(("Tomorrow" if "tomorrow" in text else "Today's board") + ":\n" + ("\n".join(lines) if lines else "No bookings."))
             if ("owe" in text or "outstanding" in text or "unpaid" in text) and "list_unpaid_invoices" in tool_names:
                 if "list_unpaid_invoices" not in done:
                     return call("list_unpaid_invoices")
@@ -260,10 +269,10 @@ class MockLLM:
                 return say(f"${u.get('total_cents', 0) / 100:.2f} outstanding across {len(u.get('invoices', []))} invoices.")
             if "expense" in text and "add_expense" in tool_names:
                 if "add_expense" not in done:
-                    m = re.search(r"\$\s*(\d+(?:\.\d{1,2})?)", text)
+                    m = re.search(r"\$\s*(\d+(?:\.\d{1,2})?)", text) or re.search(r"(\d+(?:\.\d{1,2})?)\s*(?:dollars|bucks)", text)
                     cents = int(round(float(m.group(1)) * 100)) if m else 0
                     desc = re.sub(r"^.*?expense[:,]?\s*", "", text).strip() or "expense"
-                    desc = re.sub(r"\$\s*\d+(?:\.\d{1,2})?\s*", "", desc).strip(" ,.") or "expense"
+                    desc = re.sub(r"\$\s*\d+(?:\.\d{1,2})?\s*|\d+(?:\.\d{1,2})?\s*(?:dollars|bucks)\s*(?:for\s*)?", "", desc).strip(" ,.") or "expense"
                     return call("add_expense", description=desc, amount_cents=cents, category="consumables")
                 e = results.get("add_expense", {})
                 return say(f"Logged that expense (#{e.get('expense_id')}), GST portion ${e.get('gst_cents', 0) / 100:.2f}.")
@@ -355,21 +364,21 @@ def _mock_job_card(t: str) -> dict[str, Any]:
         hours = float(m.group(1))
     elif "hour and a half" in t:
         hours = 1.5
-    elif re.search(r"\b(?:an|one) hour\b", t):
-        hours = 1.0
     elif "half an hour" in t:
         hours = 0.5
+    elif re.search(r"\b(?:an|one) hour\b", t):
+        hours = 1.0
     parts, seen = [], t
     for key, name in _MOCK_PARTS:
         if key in seen:
-            pm = re.search(re.escape(key) + r"\s*\$\s*(\d+(?:\.\d{1,2})?)", seen)
+            pm = re.search(re.escape(key) + r"\s*\$?\s*(\d+(?:\.\d{1,2})?)\b(?!\s*(?:hours?|hrs?|all up))", seen)
             parts.append({"name": name, "qty": 1, "price_dollars": float(pm.group(1)) if pm else None})
             seen = seen.replace(key, "")
     total = re.search(r"\$?\s*(\d+(?:\.\d{1,2})?)\s*(?:dollars\s*)?all up", t) or re.search(r"(?:total|charge(?: her| him| them)?)\s*(?:is\s*)?\$?\s*(\d+(?:\.\d{1,2})?)", t)
-    labour_amt = re.search(r"labour\s*\$\s*(\d+(?:\.\d{1,2})?)", t) or re.search(r"labour\s+(\d+(?:\.\d{1,2})?)\s*(?:dollars|bucks)", t)
+    labour_amt = re.search(r"labour\s*\$?\s*(\d+(?:\.\d{1,2})?)\b(?!\s*(?:hours?|hrs?))", t) or re.search(r"labour\s+(\d+(?:\.\d{1,2})?)\s*(?:dollars|bucks)", t)
     work = [ln.strip(" -") for ln in t.splitlines() if ln.strip().startswith("-")]
-    vehicle = _extract_vehicle(t) or next((w.title() for w in ("corolla", "cx-5", "i30", "ranger", "cerato", "civic", "forester", "commodore", "hilux") if w in t), "")
-    name = re.search(r"\n([a-z]+)\n", t)
+    vehicle = _extract_vehicle(t) or next((w.title() for w in ("corolla", "cx-5", "i30", "ranger", "cerato", "civic", "forester", "commodore", "hilux", "x-trail") if w in t), "")
+    name = re.search(r"\n([a-z]+)\n", t) or re.search(r"(?:walk-in|new customer),?\s+([a-z]+ [a-z]+)", t)
     return {
         "car": vehicle,
         "rego": _extract_rego(t) or _spaced_rego(t),
@@ -383,6 +392,49 @@ def _mock_job_card(t: str) -> dict[str, Any]:
         "paid_method": "eftpos" if "eftpos" in t else "",
         "notes": "",
     }
+
+
+_MOCK_CARS = ("corolla", "carolla", "toyota", "hilux", "cx-5", "cx5", "mazda", "i30", "hyundai", "ranger", "ford", "cerato", "kia", "civic", "honda", "forester", "subaru", "commodore", "holden", "x-trail", "xtrail", "nissan", "bmw", "tesla")
+_MOCK_NOT_NAMES = {"the", "a", "his", "her", "my", "yesterday", "today", "tomorrow", "it", "him", "them", "that", "this", "rego", "job", "jobs", "car", "us", "me", "invoice", "invoices"}
+
+
+def _mock_owner_route(t: str, last_reply: str = "") -> dict[str, Any]:
+    """Rule-based version of Nemotron Nano reading what the owner said."""
+    when = ""
+    m = re.search(r"\b(day before yesterday|yesterday|this morning|today|last week|this week|tomorrow|\d+ days ago|(?:last |on )?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b", t)
+    if m:
+        when = m.group(1).replace("on ", "")
+    car = next((w for w in _MOCK_CARS if re.search(rf"\b{re.escape(w)}\b", t)), "")
+    rm = re.search(r"\brego\s+((?:[a-z0-9]+\s?){2,7})", t)
+    if rm:
+        car = rm.group(1).strip()
+    nm = re.search(r"\b([a-z]+)'s\b", t) or re.search(r"\b(?:for|bill)\s+([a-z]+)\b", t)
+    customer = nm.group(1) if nm and nm.group(1) not in _MOCK_NOT_NAMES and nm.group(1) not in _MOCK_CARS else ""
+    status = ""
+    if re.search(r"(aren't|not|isn't|haven't been) invoiced", t):
+        status = "to_invoice"
+    elif re.search(r"\b(owes?|unpaid|outstanding)\b", t):
+        status = "unpaid"
+    elif re.search(r"\bpaid\b", t) and t.startswith(("is ", "has ")):
+        status = "paid"
+    work = bool(re.search(r"\d+(?:\.\d+)?\s*(?:hours?|hrs?|all up|dollars|bucks)\b|hour and a half|half an hour|\b(?:an|one) hour\b|\blabour\b", t)) or bool(
+        re.search(r"\b(pads|oil|filter|battery|service|alignment|replaced|fitted|scanned)\b", t) and re.search(r"\d", t)
+    )
+    if re.search(r"\b(order|need|expense)\b", t):
+        intent = "other"
+    elif work:
+        intent = "job_card"
+    elif re.search(r"\b(invoices?|bill)\b", t) and not re.search(r"^(which|what|is|are|who)\b|aren't|not invoiced", t):
+        intent = "invoice"
+    elif re.search(r"^(what's on|who's coming|how much|what have we got on)", t) or "coming in" in t:
+        intent = "other"
+    elif re.search(r"^(what|which|who|find|is |has |anything|any )", t):
+        intent = "find"
+    elif last_reply.rstrip().endswith("Which one?") and len(t.split()) <= 6:
+        intent = "invoice"
+    else:
+        intent = "other"
+    return {"intent": intent, "when": when, "car": car, "customer": customer, "status": status}
 
 
 def _spaced_rego(t: str) -> str:

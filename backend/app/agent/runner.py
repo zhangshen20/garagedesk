@@ -54,7 +54,10 @@ def run_agent(
     tool_names: list[str],
     tier: str = "main",
     tool_context: dict[str, Any] | None = None,
+    stop_after: set[str] | None = None,
 ) -> AgentResult:
+    """stop_after: tools whose successful result ends the turn (the caller shows it),
+    saving a model round trip."""
     llm = get_llm()
     tools = schemas_for(tool_names)
     history = load_history(s, conv)
@@ -86,6 +89,12 @@ def run_agent(
             messages.append({"role": "tool", "tool_call_id": tc.id, "name": tc.name, "content": content})
             s.add(Message(conversation_id=conv.id, role="tool", content=content, tool_name=tc.name, tool_call_id=tc.id))
         s.flush()
+        last = steps[-1] if steps else None
+        if stop_after and last and last["tool"] in stop_after and last["result"].get("ok"):
+            text = str(last["result"].get("readback") or "Done.")
+            s.add(Message(conversation_id=conv.id, role="assistant", content=text, model=model))
+            s.flush()
+            return AgentResult(reply=text, steps=steps, model=model)
     text = "I've done what I can for now; the owner will follow up with you shortly."
     s.add(Message(conversation_id=conv.id, role="assistant", content=text, model=model))
     return AgentResult(reply=text, steps=steps, model=model)

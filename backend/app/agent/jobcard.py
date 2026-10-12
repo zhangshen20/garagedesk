@@ -126,7 +126,8 @@ def match_open_job(s: Session, hint: str, rego: str = "", statuses: list[JobStat
         score = len(hint_words & hay)
         if score > best_score:
             best, best_score = j, score
-    return best
+    # a rego that matches nothing is a different car: never guess from a shared name or model
+    return None if rk else best
 
 
 def _job_from_todays_booking(s: Session, hint: str, rego: str) -> Job | None:
@@ -142,6 +143,8 @@ def _job_from_todays_booking(s: Session, hint: str, rego: str) -> Job | None:
         if rk and _rego_key(plate) == rk:
             best = b
             break
+        if rk:
+            continue
         score = len(hint_words & _words(f"{v['vehicle']} {v['customer']}"))
         if score > best_score:
             best, best_score = b, score
@@ -191,6 +194,10 @@ def match_part(s: Session, name: str, vehicle: str = "") -> Part | None:
         overlap = len(want & have)
         # one shared word ("front") is not a match, unless the owner said one word
         if overlap < min(2, len(_words(name))):
+            continue
+        # a part catalogued for another car ("... - Toyota Corolla" on a Mazda) doesn't fit
+        fits_for = _words(p.name.split(" - ", 1)[1]) if " - " in p.name else set()
+        if fits_for and car and not (fits_for & car):
             continue
         # prefer the part for this car, and an exact-ish name over a loose one
         score = overlap + 0.5 * len(car & have) - 0.01 * len(have)

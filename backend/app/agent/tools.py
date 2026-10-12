@@ -255,7 +255,7 @@ def _record_payment(s: Session, invoice_number: str, amount_cents: int, method: 
 @tool(
     "update_car_status",
     "The owner says how a car is going ('the Hilux is done', 'Mazda waiting on parts till Thursday'). Finds the job from loose words (rego, make, model or customer name), moves it to the new status and texts the customer.",
-    {"car": {**S, "description": "words identifying the car, e.g. 'Hilux' or 'Maria's Corolla'"}, "status": {**S, "enum": ["in_progress", "waiting_parts", "done"]}, "message": {**S, "description": "anything the customer should hear, e.g. 'part arrives Thursday'"}},
+    {"car": {**S, "description": "words identifying the car, e.g. 'Hilux' or 'Maria's Corolla'"}, "status": {**S, "enum": ["in_progress", "waiting_parts", "done"]}, "message": {**S, "description": "only what the owner actually said for the customer, e.g. 'part arrives Thursday'; leave empty if he said nothing more. Never add dates or details he didn't say."}},
     ["car", "status"],
 )
 def _update_car_status(s: Session, car: str, status: str, message: str = "") -> dict[str, Any]:

@@ -89,3 +89,20 @@ def test_status_update_and_paid_by_voice(client):
     assert any("Jack" in o["body"] and "finished" in o["body"] for o in _outbox(client))
     today = client.get("/api/owner/today").json()
     assert any(j["rego"] == "1KR9ZZ" and j["status"] == "done" for j in today["jobs"])
+
+
+def test_unknown_rego_is_not_matched_by_name(client):
+    # a new customer who shares a surname with Priya Patel, and a Ranger that isn't Liam's
+    r = client.post("/api/owner/voice", json={"text": "Mazda 3 DEF456 for J Patel, front pads, one hour labour"}).json()
+    assert not r["ok"] or r["job"]["rego"] == "DEF456"
+    r = client.post("/api/owner/voice", json={"text": "Ranger 1XY9KL, oil filter, half an hour"}).json()
+    assert not r["ok"] or r["job"]["rego"] == "1XY9KL"
+
+
+def test_part_for_another_car_is_not_used(client):
+    from app.agent.jobcard import match_part
+    from app.db import session_scope
+
+    with session_scope() as s:
+        assert match_part(s, "Pads", "Mazda CX-5 1KR9ZZ") is None
+        assert match_part(s, "Brake pads front", "Toyota Corolla ABC123") is not None

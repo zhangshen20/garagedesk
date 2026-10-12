@@ -145,6 +145,23 @@ def owner_send(job_id: int, s: Session = Depends(get_session)) -> dict[str, Any]
     return r
 
 
+@router.post("/owner/jobs/{job_id}/receipt")
+def owner_receipt(job_id: int, body: PhotoIn, s: Session = Depends(get_session)) -> dict[str, Any]:
+    from ..agent.jobcard import add_receipt
+
+    j = s.get(Job, job_id)
+    if not j:
+        raise HTTPException(404)
+    if j.status in (JobStatus.invoiced, JobStatus.paid):
+        raise HTTPException(400, "job already invoiced")
+    b64 = body.image_b64.split(",", 1)[-1]
+    if len(b64) > 12_000_000:
+        raise HTTPException(413, "photo too large")
+    r = add_receipt(s, j, b64, body.mime)
+    s.commit()
+    return {"kind": "draft", **r.as_dict()}
+
+
 class PaidIn(BaseModel):
     method: str = "eftpos"
 

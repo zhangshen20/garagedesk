@@ -96,6 +96,7 @@ export default function OwnerApp() {
   const recRef = useRef<Recognition | null>(null);
   const finalRef = useRef("");
   const photoRef = useRef<HTMLInputElement>(null);
+  const receiptJob = useRef<number | null>(null);
   const canListen = useRef<boolean>(makeRecognition() !== null);
 
   const refresh = useCallback(() => {
@@ -173,20 +174,20 @@ export default function OwnerApp() {
   async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     e.target.value = "";
-    if (!f) return;
+    const jobId = receiptJob.current;
+    if (!f || jobId === null) return;
     unlockSpeech();
-    setResult(null);
-    setHeard("Reading the job card…");
+    setHeard("Reading the receipt…");
     setPhase("thinking");
     try {
       const b64 = await shrinkPhoto(f);
-      const r = await api.ownerPhoto(b64);
+      const r = await api.ownerReceipt(jobId, b64);
       setResult(r);
-      setHeard(r.transcript ? `Card says: ${r.transcript.replace(/\n/g, " · ")}` : "");
+      setHeard(r.transcript ? `Receipt says: ${r.transcript.replace(/\n/g, " · ")}` : "");
       speak(r.readback);
       refresh();
     } catch {
-      setResult({ kind: "draft", ok: false, readback: "I couldn't read that photo. Try again with the whole card in view." });
+      setResult({ kind: "draft", ok: false, readback: "I couldn't read that receipt. Try again with the whole receipt in view." });
     } finally {
       setPhase("idle");
     }
@@ -276,12 +277,12 @@ export default function OwnerApp() {
                 setTyped("");
               }}
             >
-              <label className="mb-2 block text-center text-sm text-slate-300">Tap the box, then the microphone on your keyboard, and say the job.</label>
+              <label className="mb-2 block text-center text-sm text-slate-300">Tap the box, then the microphone on your keyboard. Say the car, what you did, and what to charge.</label>
               <textarea
                 value={typed}
                 onChange={(e) => setTyped(e.target.value)}
                 rows={3}
-                placeholder="Corolla ABC123 done, front pads, hour and a half"
+                placeholder="Corolla ABC123 done, front pads, hour and a half, 350 all up"
                 className="w-full rounded-2xl border border-slate-700 bg-slate-800 p-4 text-lg text-white placeholder:text-slate-500 focus:border-brand-500 focus:outline-none"
               />
               <button type="submit" disabled={phase === "thinking" || !typed.trim()} className="mt-3 flex h-16 w-full items-center justify-center gap-2 rounded-2xl bg-brand-600 text-lg font-semibold disabled:opacity-50">
@@ -290,14 +291,7 @@ export default function OwnerApp() {
             </form>
           )}
 
-          <button
-            type="button"
-            onClick={() => photoRef.current?.click()}
-            disabled={phase !== "idle"}
-            className="mt-6 flex h-16 w-full items-center justify-center gap-3 rounded-2xl border border-slate-600 bg-slate-800 text-lg font-semibold active:bg-slate-700 disabled:opacity-50"
-          >
-            <Camera size={26} /> Photo of job card
-          </button>
+          {canListen.current && <p className="mt-5 text-center text-base text-slate-300">Say it like you'd tell the office: the car, what you did, and what to charge.</p>}
           <input ref={photoRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPhoto} />
         </section>
 
@@ -334,7 +328,18 @@ export default function OwnerApp() {
                     <span className="tabular-nums">{money(draft.total_cents)}</span>
                   </div>
                 </div>
-                <div className="mt-4 grid grid-cols-[1fr_auto] gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    receiptJob.current = draft.job_id;
+                    photoRef.current?.click();
+                  }}
+                  disabled={phase !== "idle"}
+                  className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-slate-300 text-base font-semibold text-slate-700 active:bg-slate-100 disabled:opacity-50"
+                >
+                  <Camera size={20} /> Add parts from a receipt photo
+                </button>
+                <div className="mt-3 grid grid-cols-[1fr_auto] gap-3">
                   <button
                     type="button"
                     onClick={() => send(draft.job_id)}

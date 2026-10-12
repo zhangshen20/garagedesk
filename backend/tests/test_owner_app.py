@@ -114,3 +114,34 @@ def test_demo_reset_restores_clean_state(client):
     today = client.get("/api/owner/today").json()
     assert any(j["rego"] == "1KR9ZZ" and j["status"] == "in_progress" for j in today["jobs"])
     assert len(client.get("/api/outbox").json()["outbox"]) <= 2  # only the seeded receipt
+
+
+def test_his_total_is_the_invoice_total(client):
+    # the way he'd say it to his wife: what he did, and what to charge, all up
+    r = client.post("/api/owner/voice", json={"text": "Corolla ABC123, front pads, hour and a half, $350 all up"}).json()
+    assert r["ok"], r
+    assert r["job"]["total_cents"] == 35000
+    pads = next(l for l in r["job"]["lines"] if l["kind"] == "part")
+    assert pads["unit_cents"] == 11900  # catalogue fills the part, labour takes the balance
+    assert "350.00 dollars" in r["readback"]
+    assert r["job"]["gst_cents"] + r["job"]["subtotal_cents"] == 35000
+
+
+def test_his_item_and_labour_prices_are_used(client):
+    r = client.post("/api/owner/voice", json={"text": "Corolla ABC123, pads $120, labour $180, one hour"}).json()
+    assert r["ok"], r
+    assert r["job"]["total_cents"] == 30000
+    assert "labour 180.00" in r["readback"] and "pads front 120.00" in r["readback"]
+
+
+def test_receipt_photo_adds_parts_and_books_the_expense(client):
+    img = base64.b64encode(b"\xff\xd8\xff fake jpeg").decode()
+    job = client.post("/api/owner/voice", json={"text": "Corolla ABC123, machined rotors, one hour labour"}).json()["job"]
+    r = client.post(f"/api/owner/jobs/{job['job_id']}/receipt", json={"image_b64": img}).json()
+    assert r["ok"], r
+    parts = [l for l in r["job"]["lines"] if l["kind"] == "part"]
+    assert len(parts) == 2
+    assert r["job"]["total_cents"] == job["total_cents"] + 9460  # at cost, no markup by default
+    assert "Added" in r["readback"]
+    exp = client.get("/api/money").json()["summary"]
+    assert exp["cash_out_cents"] >= 9460

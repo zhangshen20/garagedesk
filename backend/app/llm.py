@@ -140,7 +140,9 @@ class MockLLM:
     already in the transcript and decides the next tool call or final answer."""
 
     def vision(self, prompt: str, image_b64: str, *, mime: str = "image/jpeg", max_tokens: int = 800) -> LLMReply:
-        # Whatever the photo, the mock reads the same believable job card.
+        # Whatever the photo, the mock reads the same believable receipt or job card.
+        if "receipt" in prompt.lower():
+            return LLMReply(content=MOCK_RECEIPT, model=f"mock/{get_settings().model_vision.split('/')[-1]}")
         return LLMReply(content=MOCK_JOB_CARD, model=f"mock/{get_settings().model_vision.split('/')[-1]}")
 
     def chat(
@@ -183,6 +185,13 @@ class MockLLM:
             elif any(k in text for k in ("cancel", "reschedule", "move")):
                 intent = "change_booking"
             return say(json.dumps({"intent": intent, "urgency": "normal"}))
+
+        if json_mode and "supplier receipt" in system.lower():
+            parts = []
+            for m in re.finditer(r"^(\d+)\s*x\s*(.+?)\s+\$(\d+(?:\.\d{2})?)$", text, flags=re.MULTILINE):
+                parts.append({"name": m.group(2).strip().title(), "qty": int(m.group(1)), "line_total_dollars": float(m.group(3))})
+            tm = re.search(r"total\s*\$(\d+(?:\.\d{2})?)", text)
+            return say(json.dumps({"supplier": "Burson Auto Parts" if "burson" in text else "", "parts": parts, "total_dollars": float(tm.group(1)) if tm else None, "gst_dollars": None}))
 
         if json_mode and "job card" in system.lower():
             return say(json.dumps(_mock_job_card(text)))
@@ -312,6 +321,12 @@ class MockLLM:
         )
 
 
+MOCK_RECEIPT = """BURSON AUTO PARTS - Sunshine
+1 x Brake pads front Corolla $75.90
+1 x Brake fluid DOT4 500ml $18.70
+GST incl $8.60
+TOTAL $94.60"""
+
 MOCK_JOB_CARD = """JOB CARD
 Rego: ABC 123  Corolla
 Maria
@@ -350,6 +365,8 @@ def _mock_job_card(t: str) -> dict[str, Any]:
             pm = re.search(re.escape(key) + r"\s*\$\s*(\d+(?:\.\d{1,2})?)", seen)
             parts.append({"name": name, "qty": 1, "price_dollars": float(pm.group(1)) if pm else None})
             seen = seen.replace(key, "")
+    total = re.search(r"\$?\s*(\d+(?:\.\d{1,2})?)\s*(?:dollars\s*)?all up", t) or re.search(r"(?:total|charge(?: her| him| them)?)\s*(?:is\s*)?\$?\s*(\d+(?:\.\d{1,2})?)", t)
+    labour_amt = re.search(r"labour\s*\$\s*(\d+(?:\.\d{1,2})?)", t) or re.search(r"labour\s+(\d+(?:\.\d{1,2})?)\s*(?:dollars|bucks)", t)
     work = [ln.strip(" -") for ln in t.splitlines() if ln.strip().startswith("-")]
     vehicle = _extract_vehicle(t) or next((w.title() for w in ("corolla", "cx-5", "i30", "ranger", "cerato", "civic", "forester", "commodore", "hilux") if w in t), "")
     name = re.search(r"\n([a-z]+)\n", t)
@@ -359,6 +376,8 @@ def _mock_job_card(t: str) -> dict[str, Any]:
         "customer_name": name.group(1).title() if name else "",
         "labour_hours": hours,
         "labour_description": ", ".join(work[:2]) if work else "Workshop labour",
+        "labour_dollars": float(labour_amt.group(1)) if labour_amt else None,
+        "total_dollars": float(total.group(1)) if total else None,
         "parts": parts,
         "fees": [],
         "paid_method": "eftpos" if "eftpos" in t else "",

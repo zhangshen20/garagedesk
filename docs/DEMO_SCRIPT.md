@@ -1,6 +1,8 @@
 # Demo video script (target 2:45, max 3:00)
 
-Record at 1080p, dashboard in a browser on the left two-thirds, phone-sized window on the right for the customer side. Voice-over in plain speech; the on-screen action carries it.
+Record at 1080p against the live site (http://66.201.4.40/ for the dashboard, http://66.201.4.40/chat in a phone-sized window on the right for the customer side). Voice-over in plain speech; the on-screen action carries it. The live site runs real Nemotron calls, so each agent turn takes 2-5 seconds; keep talking over the pause rather than cutting.
+
+Before recording: open the Report page and press Generate once so the Ultra report is ready to show, and keep the Approvals page empty so the parts-order approval in the script is the only item.
 
 ## 0:00–0:20  The problem
 *On screen: the Today board with six cars and the Agent activity feed scrolling.*
@@ -41,3 +43,9 @@ Record at 1080p, dashboard in a browser on the left two-thirds, phone-sized wind
 - [ ] Invoice PDF open
 - [ ] Daily report
 - [ ] README architecture diagram
+
+## After recording
+1. Upload to YouTube as Public or Unlisted (Devpost accepts both), title "GarageDesk: AI front desk and back office for a mechanic shop (Nebius x NVIDIA hackathon)".
+2. Paste the YouTube link into docs/SUBMISSION.md "Links" and into the Devpost form.
+3. Devpost form fields come straight from docs/SUBMISSION.md: tagline, category (Best Apps and Agents), description sections, "Built with", repo link, demo URL, video link, and the feedback text from docs/FEEDBACK.md.
+4. Submit by Oct 28 to leave two days of buffer before the Oct 30, 10:00am PDT deadline.

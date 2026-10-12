@@ -27,10 +27,14 @@ type Recognition = {
   onerror: ((e: { error: string }) => void) | null;
 };
 
+/** Chrome, Firefox and Edge on iPhone expose the speech API but iOS refuses it
+ * ("service-not-allowed"); only Safari can listen. */
+const IOS_OTHER_BROWSER = /CriOS|FxiOS|EdgiOS|OPiOS/.test(navigator.userAgent);
+
 function makeRecognition(): Recognition | null {
   const w = window as unknown as { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition };
   const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
-  if (!Ctor || !window.isSecureContext) return null;
+  if (!Ctor || !window.isSecureContext || IOS_OTHER_BROWSER) return null;
   const r = new Ctor();
   r.lang = "en-AU";
   r.continuous = true;
@@ -151,11 +155,15 @@ export default function OwnerApp() {
   const [toast, setToast] = useState("");
   const recRef = useRef<Recognition | null>(null);
   const finalRef = useRef("");
+  const interimRef = useRef("");
+  const finishRef = useRef<((why: string) => void) | null>(null);
   const photoRef = useRef<HTMLInputElement>(null);
   const receiptJob = useRef<number | null>(null);
   const canListen = useRef<boolean>(makeRecognition() !== null);
   const [typing, setTyping] = useState<boolean>(() => !canListen.current || prefersTyping());
-  const [micNote, setMicNote] = useState("");
+  const [micNote, setMicNote] = useState(
+    IOS_OTHER_BROWSER ? "Chrome on iPhone can't use the talk button. Open this link in Safari to talk, or tap the box and use the keyboard microphone." : "",
+  );
   const errRef = useRef("");
   const [pressing, setPressing] = useState(false);
   const phaseRef = useRef<Phase>("idle");
@@ -228,6 +236,7 @@ export default function OwnerApp() {
       return;
     }
     finalRef.current = "";
+    interimRef.current = "";
     errRef.current = "";
     startedBy.current = by;
     startedOk.current = false;
@@ -238,24 +247,46 @@ export default function OwnerApp() {
       startedOk.current = true;
       diag("started", { by });
     };
+    let results = 0;
     rec.onresult = (e) => {
+      // rebuild from every result: iPhone Safari re-sends earlier ones
+      let final = "";
       let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
+      for (let i = 0; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal) finalRef.current += r[0].transcript + " ";
-        else interim += r[0].transcript;
+        if (r.isFinal) final += r[0].transcript + " ";
+        else interim += r[0].transcript + " ";
       }
-      setHeard((finalRef.current + interim).trim());
+      finalRef.current = final;
+      interimRef.current = interim;
+      setHeard((final + interim).trim());
+      if (results++ === 0) diag("first-result", { by, final: Boolean(final) });
     };
     rec.onerror = (e) => {
       errRef.current = e.error;
       diag("error", { code: e.error, by, started: startedOk.current });
+      // iPhones don't always send "end" after an error: finish now so he isn't stuck listening
+      if (e.error !== "no-speech" && e.error !== "aborted") {
+        try {
+          rec.abort();
+        } catch {
+          /* ignore */
+        }
+        finishRef.current?.(e.error);
+      }
     };
-    rec.onend = () => {
+    let done = false;
+    const limit = setTimeout(() => stopListening(), 45000);
+    const finish = (why: string) => {
+      if (done) return;
+      done = true;
+      clearTimeout(limit);
+      finishRef.current = null;
       recRef.current = null;
-      const said = finalRef.current.trim();
+      // words still marked "not final" count too: some iPhones never finalise
+      const said = (finalRef.current + interimRef.current).trim();
       const err = errRef.current;
-      diag("end", { by, words: said.split(/\s+/).filter(Boolean).length, err, started: startedOk.current });
+      diag("end", { by, why, words: said.split(/\s+/).filter(Boolean).length, results, err, started: startedOk.current });
       if (said) {
         void submitText(said);
         return;
@@ -277,6 +308,8 @@ export default function OwnerApp() {
         setMicNote(micProblem("no-speech"));
       }
     };
+    finishRef.current = finish;
+    rec.onend = () => finish("end");
     recRef.current = rec;
     setPhase("listening");
     try {
@@ -299,8 +332,26 @@ export default function OwnerApp() {
   function stopListening() {
     unlockSpeech();
     const rec = recRef.current;
+    const finish = finishRef.current;
+    if (!rec || !finish) return;
     // let the last words land before ending
-    if (rec) setTimeout(() => rec.stop(), 300);
+    setTimeout(() => {
+      try {
+        rec.stop();
+      } catch {
+        /* already stopped */
+      }
+    }, 300);
+    // some iPhones never fire "end" after stop: don't leave him stuck listening
+    setTimeout(() => {
+      if (finishRef.current !== finish) return;
+      try {
+        rec.abort();
+      } catch {
+        /* ignore */
+      }
+      finish("forced");
+    }, 1800);
   }
 
   // Hold to talk and tap to talk both work. A press starts listening straight

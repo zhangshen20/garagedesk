@@ -15,6 +15,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from sqlmodel import Session, select
@@ -241,6 +242,7 @@ def apply_to_job(s: Session, job: Job, ex: dict[str, Any]) -> list[str]:
     v = svc.job_view(s, job)
     for line in s.exec(select(JobLine).where(JobLine.job_id == job.id)).all():
         s.delete(line)
+    job.stated_total_cents = None
     s.flush()
 
     hours = _num(ex.get("labour_hours"))
@@ -299,36 +301,46 @@ def _num(v: Any) -> float | None:
         return None
 
 
-def _subtotal_for(total_cents: int) -> int:
-    """Ex-GST subtotal whose GST-inclusive total comes out to exactly total_cents."""
-    rate = get_settings().gst_rate
-    base = int(round(total_cents / (1 + rate)))
-    for sub in (base, base - 1, base + 1):
-        if sub + svc.gst_on(sub) == total_cents:
-            return sub
-    return base
+def _cents(dollars: float) -> int:
+    return int(Decimal(str(dollars)).scaleb(2).quantize(Decimal(1), ROUND_HALF_UP))
+
+
+def _line_cents(l: JobLine) -> int:
+    return int((Decimal(str(l.qty)) * l.unit_cents).quantize(Decimal(1), ROUND_HALF_UP))
 
 
 def _hit_total(s: Session, job: Job, labour: JobLine | None, desc: str, hours: float | None, total_dollars: float, *, labour_fixed: bool) -> list[str]:
-    """He said what the whole job costs. Make the invoice add up to exactly that: the
-    labour line takes the balance after the parts, as his wife would have done."""
-    target = _subtotal_for(int(round(total_dollars * 100)))
+    """He said what the whole job costs. Make the invoice come to exactly that, to the
+    cent: GST is 1/11 of his total, and the labour line takes the balance after the
+    parts (in whole cents), as his wife would have done. job_totals then reports his
+    total because the lines add up to it by construction."""
+    total = _cents(total_dollars)
+    target = total - svc.gst_in(total)  # ex-GST subtotal the lines must add up to
     lines = s.exec(select(JobLine).where(JobLine.job_id == job.id)).all()
-    others = sum(int(round(l.qty * l.unit_cents)) for l in lines if l is not labour)
     if labour_fixed:
-        current = sum(int(round(l.qty * l.unit_cents)) for l in lines)
-        if current == target:
-            return []
-        return [f"Your items add up to {(current * 1.1) / 100:,.2f}, not {total_dollars:,.2f}."]
+        # he priced every item; converting each to ex GST can leave a cent or two over
+        # or under his total, which the labour line absorbs
+        current = sum(_line_cents(l) for l in lines)
+        diff = target - current
+        if diff and labour is not None and labour.qty == 1 and abs(diff) <= max(2, len(lines)):
+            labour.unit_cents += diff
+            s.flush()
+            current = target
+        if current != target:
+            return [f"Your items add up to {(current + svc.gst_on(current)) / 100:,.2f}, not {total / 100:,.2f}."]
+        job.stated_total_cents = total
+        return []
+    others = sum(_line_cents(l) for l in lines if l is not labour)
     balance = target - others
     if balance < 0:
-        return [f"The parts alone come to more than {total_dollars:,.2f}."]
+        return [f"The parts alone come to more than {total / 100:,.2f}."]
     if labour is None:
         labour = JobLine(job_id=job.id, kind=LineKind.labour, description=desc, qty=1, unit_cents=0)
         s.add(labour)
     labour.qty = 1
     labour.unit_cents = balance
     labour.description = desc + (f" ({hours:g} hrs)" if hours else "")
+    job.stated_total_cents = total
     s.flush()
     return []
 

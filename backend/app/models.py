@@ -76,6 +76,9 @@ class Job(SQLModel, table=True):
     title: str
     status: JobStatus = JobStatus.quoted
     mechanic_notes: str | None = None
+    # the total he said ("350 all up"), inc GST: the invoice comes to exactly this,
+    # GST being 1/11 of it, while the lines still add up to it (see services.job_totals)
+    stated_total_cents: int | None = None
     created_at: NaiveDatetime = Field(default_factory=now)
     updated_at: NaiveDatetime = Field(default_factory=now)
 

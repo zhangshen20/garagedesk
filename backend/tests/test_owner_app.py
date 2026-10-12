@@ -182,3 +182,49 @@ def test_misheard_labour_is_put_back():
     from app.agent.stt import _fix_words
 
     assert _fix_words("Mazda 1KR9ZZ, oil and filter, label 120.") == "Mazda 1KR9ZZ, oil and filter, labour 120."
+
+
+def test_stated_totals_come_out_to_the_cent(client):
+    """Whatever total he says and whatever parts are on it, the invoice comes to exactly
+    that total, its lines add up, and GST is 1/11 of the total."""
+    import random
+
+    from sqlmodel import select
+
+    from app import services as svc
+    from app.agent.jobcard import _hit_total
+    from app.db import session_scope
+    from app.models import Job, JobLine, LineKind
+
+    rng = random.Random(7)
+    with session_scope() as s:
+        job = s.exec(select(Job)).first()
+        for i in range(400):
+            for l in s.exec(select(JobLine).where(JobLine.job_id == job.id)).all():
+                s.delete(l)
+            job.stated_total_cents = None
+            s.flush()
+            parts = [JobLine(job_id=job.id, kind=LineKind.part, description=f"p{k}", qty=rng.choice([1, 1, 2, 4]), unit_cents=rng.randint(100, 9000)) for k in range(rng.randint(0, 3))]
+            s.add_all(parts)
+            s.flush()
+            parts_ex = sum(int(p.qty * p.unit_cents) for p in parts)
+            total = rng.randint(parts_ex * 11 // 10 + 200, parts_ex * 11 // 10 + 200_000)
+            if i % 4 == 0:
+                total -= total % 100  # whole dollars, the way he says it
+            labour = JobLine(job_id=job.id, kind=LineKind.labour, description="Labour", qty=1.5, unit_cents=12000) if i % 2 else None
+            if labour:
+                s.add(labour)
+                s.flush()
+            assert _hit_total(s, job, labour, "Labour", 1.5, total / 100, labour_fixed=False) == []
+            sub, gst, tot = svc.job_totals(s, job)
+            lines = s.exec(select(JobLine).where(JobLine.job_id == job.id)).all()
+            assert tot == total, (total, sub, gst)
+            assert sub + gst == tot and sum(int(l.qty * l.unit_cents) for l in lines) == sub
+            assert gst == svc.gst_in(total)
+
+
+def test_spoken_380_all_up_is_380(client):
+    r = client.post("/api/owner/voice", json={"text": "Corolla ABC123 done, front pads, hour and a half, 380 all up"}).json()
+    assert r["job"]["total_cents"] == 38000, r["readback"]
+    r = client.post("/api/owner/voice", json={"text": "Corolla ABC123 done, front pads, hour and a half, 170 all up"}).json()
+    assert r["job"]["total_cents"] == 17000, r["readback"]  # $170 used to come out a cent off

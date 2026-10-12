@@ -7,6 +7,7 @@ import hmac
 import json
 import re
 from datetime import date, datetime, time, timedelta
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -256,16 +257,27 @@ def booking_view(s: Session, b: Booking) -> dict[str, Any]:
 
 
 def job_totals(s: Session, job: Job) -> tuple[int, int, int]:
+    """(subtotal ex GST, GST, total inc GST) in cents.
+    When he stated the total and the lines were built to it, GST is 1/11 of that total
+    and the three add up to exactly what he said. Otherwise GST is 10% of the lines."""
     lines = s.exec(select(JobLine).where(JobLine.job_id == job.id)).all()
-    subtotal = int(round(sum(l.qty * l.unit_cents for l in lines)))
+    subtotal = int((sum((Decimal(str(l.qty)) * l.unit_cents for l in lines), Decimal(0))).quantize(Decimal(1), ROUND_HALF_UP))
+    stated = job.stated_total_cents
+    if stated is not None and subtotal == stated - gst_in(stated):
+        return subtotal, stated - subtotal, stated
     gst = gst_on(subtotal)
     return subtotal, gst, subtotal + gst
 
 
 def gst_on(subtotal_cents: int) -> int:
-    """GST rounded half up, as on a tax invoice (Python's round() goes to even, which
-    made "380 all up" come out at $379.99)."""
-    return int(subtotal_cents * get_settings().gst_rate + 0.5)
+    """GST on an ex-GST amount, rounded half up to the cent as on a tax invoice."""
+    return int((Decimal(subtotal_cents) * Decimal(str(get_settings().gst_rate))).quantize(Decimal(1), ROUND_HALF_UP))
+
+
+def gst_in(total_cents: int) -> int:
+    """The GST inside a GST-inclusive amount (1/11 at 10%), rounded half up to the cent."""
+    rate = Decimal(str(get_settings().gst_rate))
+    return int((Decimal(total_cents) * rate / (1 + rate)).quantize(Decimal(1), ROUND_HALF_UP))
 
 
 def job_view(s: Session, job: Job) -> dict[str, Any]:

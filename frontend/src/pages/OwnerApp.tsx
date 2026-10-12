@@ -1,12 +1,14 @@
 /** The owner app: one big button for a mechanic who doesn't type.
  *
- * Hold to talk ("Corolla ABC123 done, front pads, hour and a half"), or photograph
- * the paper job card. The draft invoice is read back out loud; one tap sends it to
+ * Tap to talk, tap when done ("Corolla ABC123, front pads, hour and a half, 350 all
+ * up"), the way he'd tell the office on the phone. If the iPhone won't listen (Siri
+ * dictation off, mic blocked, Home Screen app) it falls back to the keyboard's own
+ * microphone. The draft invoice is read back out loud; one tap sends it to
  * whoever does the books for approval. Built for an iPhone on the workshop bench:
  * big targets, no menus, no login. */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, Check, CircleDollarSign, Clock, Loader2, Mic, RotateCcw, Send, Volume2, Wrench } from "lucide-react";
+import { Camera, Check, CircleDollarSign, Clock, Loader2, Mic, RotateCcw, Send, Square, Volume2, Wrench } from "lucide-react";
 import { api, type OwnerJob, type OwnerResult, type OwnerToday } from "../api";
 import { money } from "../format";
 
@@ -48,6 +50,35 @@ function speak(text: string) {
     window.speechSynthesis.speak(u);
   } catch {
     /* no speech synthesis: the text is on screen */
+  }
+}
+
+/** Why the iPhone wouldn't listen, in words he can act on. */
+function micProblem(code: string): string {
+  if (code === "no-speech") return "I didn't hear anything. Tap the button and talk again.";
+  if (code === "not-allowed" || code === "service-not-allowed")
+    return "This iPhone isn't letting the page listen. Use the keyboard microphone for now: tap the box, then the microphone key. To fix it: open this link in Safari (not from the Home Screen), allow the microphone when asked, and make sure Settings, General, Keyboard, Enable Dictation is on.";
+  if (code === "audio-capture") return "Another app is using the microphone. Close it and tap again, or use the keyboard microphone.";
+  if (code === "network") return "No internet for the voice. Check the signal, or use the keyboard microphone.";
+  return "The voice didn't start. Use the keyboard microphone instead.";
+}
+
+const TYPE_KEY = "garagedesk.owner.type";
+
+function prefersTyping(): boolean {
+  try {
+    return localStorage.getItem(TYPE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function rememberTyping(on: boolean) {
+  try {
+    if (on) localStorage.setItem(TYPE_KEY, "1");
+    else localStorage.removeItem(TYPE_KEY);
+  } catch {
+    /* private mode: just this visit */
   }
 }
 
@@ -98,6 +129,9 @@ export default function OwnerApp() {
   const photoRef = useRef<HTMLInputElement>(null);
   const receiptJob = useRef<number | null>(null);
   const canListen = useRef<boolean>(makeRecognition() !== null);
+  const [typing, setTyping] = useState<boolean>(() => !canListen.current || prefersTyping());
+  const [micNote, setMicNote] = useState("");
+  const errRef = useRef("");
 
   const refresh = useCallback(() => {
     api.ownerToday().then(setToday).catch(() => undefined);
@@ -138,12 +172,16 @@ export default function OwnerApp() {
   }
 
   function startListening() {
-    unlockSpeech();
     window.speechSynthesis?.cancel();
     const rec = makeRecognition();
-    if (!rec) return;
+    if (!rec) {
+      setTyping(true);
+      return;
+    }
     finalRef.current = "";
+    errRef.current = "";
     setHeard("");
+    setMicNote("");
     setResult(null);
     rec.onresult = (e) => {
       let interim = "";
@@ -154,21 +192,50 @@ export default function OwnerApp() {
       }
       setHeard((finalRef.current + interim).trim());
     };
-    rec.onerror = () => setPhase("idle");
+    rec.onerror = (e) => {
+      errRef.current = e.error;
+    };
     rec.onend = () => {
       recRef.current = null;
-      void submitText(finalRef.current || "");
+      const said = finalRef.current.trim();
+      const err = errRef.current;
+      if (said) {
+        void submitText(said);
+        return;
+      }
+      setPhase("idle");
+      if (err && err !== "aborted") {
+        setMicNote(micProblem(err));
+        if (err !== "no-speech") {
+          setTyping(true);
+          rememberTyping(true);
+        }
+      } else {
+        setMicNote(micProblem("no-speech"));
+      }
     };
     recRef.current = rec;
     setPhase("listening");
-    rec.start();
+    try {
+      rec.start();
+    } catch {
+      recRef.current = null;
+      setPhase("idle");
+      setMicNote(micProblem(""));
+      setTyping(true);
+    }
   }
 
   function stopListening() {
-    if (recRef.current) {
-      // let the last words land before ending
-      setTimeout(() => recRef.current?.stop(), 350);
-    }
+    unlockSpeech();
+    const rec = recRef.current;
+    // let the last words land before ending
+    if (rec) setTimeout(() => rec.stop(), 300);
+  }
+
+  function onTalk() {
+    if (phase === "listening") stopListening();
+    else if (phase === "idle") startListening();
   }
 
   async function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
@@ -244,27 +311,21 @@ export default function OwnerApp() {
 
         {/* the big button */}
         <section className="mt-6 flex flex-col items-center">
-          {canListen.current ? (
+          {!typing ? (
             <button
               type="button"
-              aria-label="Hold to talk"
-              onPointerDown={(e) => {
-                e.preventDefault();
-                startListening();
-              }}
-              onPointerUp={stopListening}
-              onPointerLeave={stopListening}
-              onPointerCancel={stopListening}
+              aria-label={phase === "listening" ? "Stop and send" : "Tap to talk"}
+              onClick={onTalk}
               onContextMenu={(e) => e.preventDefault()}
               disabled={phase === "thinking"}
-              className={`relative grid h-56 w-56 select-none place-items-center rounded-full text-white shadow-float transition [-webkit-touch-callout:none] [-webkit-user-select:none] ${
+              className={`relative grid h-56 w-56 touch-manipulation select-none place-items-center rounded-full text-white shadow-float transition [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [-webkit-user-select:none] ${
                 phase === "listening" ? "scale-105 bg-red-600" : phase === "thinking" ? "bg-slate-700" : "bg-brand-600 active:scale-95"
               }`}
             >
               {phase === "listening" && <span className="absolute inset-0 animate-ping rounded-full bg-red-500/40" />}
               <span className="relative flex flex-col items-center gap-2">
-                {phase === "thinking" ? <Loader2 size={64} className="animate-spin" /> : <Mic size={72} />}
-                <span className="text-lg font-semibold">{phase === "listening" ? "Listening…" : phase === "thinking" ? "Working…" : "Hold to talk"}</span>
+                {phase === "thinking" ? <Loader2 size={64} className="animate-spin" /> : phase === "listening" ? <Square size={56} fill="currentColor" /> : <Mic size={72} />}
+                <span className="text-lg font-semibold">{phase === "listening" ? "Listening… tap when done" : phase === "thinking" ? "Working…" : "Tap to talk"}</span>
               </span>
             </button>
           ) : (
@@ -291,7 +352,22 @@ export default function OwnerApp() {
             </form>
           )}
 
-          {canListen.current && <p className="mt-5 text-center text-base text-slate-300">Say it like you'd tell the office: the car, what you did, and what to charge.</p>}
+          {micNote && <p role="status" className="mt-4 rounded-2xl bg-amber-100 p-3 text-center text-base text-amber-950">{micNote}</p>}
+          {!typing && phase !== "listening" && <p className="mt-5 text-center text-base text-slate-300">Tap, then say it like you'd tell the office: the car, what you did, and what to charge.</p>}
+          {canListen.current && (
+            <button
+              type="button"
+              onClick={() => {
+                const next = !typing;
+                setTyping(next);
+                rememberTyping(next);
+                setMicNote("");
+              }}
+              className="mt-3 text-sm text-slate-400 underline underline-offset-4"
+            >
+              {typing ? "Use the talk button" : "Talk button not working? Use the keyboard microphone"}
+            </button>
+          )}
           <input ref={photoRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPhoto} />
         </section>
 

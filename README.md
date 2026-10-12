@@ -6,6 +6,8 @@ Built for the Nebius x NVIDIA Global AI Hackathon (track: Best Apps & Agents) ar
 
 A one-owner mechanic shop loses its day to a hundred small interruptions: the phone, "is my car ready?", booking changes, chasing a brake-pad price from three suppliers, typing up tax invoices, remembering who still owes money, and working out at 6pm whether the day actually made money. GarageDesk takes all of that. The owner fixes cars; the agents run the desk.
 
+> **Live demo:** owner dashboard at http://66.201.4.40/ and customer chat at http://66.201.4.40/chat, running on a Nebius AI Cloud VM with live Nemotron models.
+>
 > Demo mode works with **no API keys at all**. Add a Nebius key and the same code runs on live Nemotron models.
 
 ## What it does
@@ -82,7 +84,7 @@ scheduler ─4pm/5:45pm──▶ reminders / report ─┘      └─ Nemotron 
 
 - **Nebius Token Factory** serves every model call through its OpenAI-compatible API with function calling. The product is designed around the three Nemotron price/capability tiers it exposes: cheap Nano calls on every message, Super for the agents, Ultra once a day.
 - **NVIDIA Nemotron 3** (Nano, Super, Ultra) are the only LLMs used. Reasoning output in `<think>` tags is stripped before display.
-- Deployment: a single Docker image (API + built dashboard + SQLite volume), suitable for a Nebius AI Cloud VM or any container host.
+- **Nebius AI Cloud** hosts the demo: one `cpu-d3` VM in eu-west1 runs the Docker image (API + built dashboard + SQLite volume) behind Caddy; see `deploy/nebius/`.
 
 ## Status
 

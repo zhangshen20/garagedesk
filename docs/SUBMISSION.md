@@ -43,5 +43,5 @@ python, fastapi, sqlmodel, react, typescript, tailwind, docker, nebius-token-fac
 
 ## Links
 - Repo: https://github.com/zhangshen20/garagedesk (MIT)
-- Demo URL: (to fill)
+- Demo URL: http://66.201.4.40/ (dashboard), http://66.201.4.40/chat (customer chat)
 - Video: (to fill)

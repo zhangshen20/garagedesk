@@ -29,7 +29,7 @@ from .schema import CHECK_BELOW, DraftField, DraftLine, JobDraft
 
 log = logging.getLogger(__name__)
 
-SCALARS = [k for k in KEYS if k not in ("work_done", "parts")]
+SCALARS = [k for k in KEYS if k not in ("work_done", "parts", "other")]
 
 BASE = {"agree": 0.95, "single": 0.8, "disagree": 0.4, "blank": 0.0}
 LABELS = {
@@ -77,7 +77,7 @@ def merge(readings: list[dict[str, Any]]) -> dict[str, Any]:
             agreement = "agree" if len(keys) == 1 else "disagree"
         alts = sorted({v for v in filled if nz.canon(v) != nz.canon(filled[0])})
         out["fields"][k] = {"raw": filled[0], "agreement": agreement, "alternatives": alts}
-    for k in ("work_done", "parts"):
+    for k in ("work_done", "parts", "other"):
         first = next((i for i, r in enumerate(readings) if r.get(k)), None)
         primary = readings[first][k] if first is not None else []
         others = [r.get(k) or [] for i, r in enumerate(readings) if i != first]
@@ -118,13 +118,15 @@ Rules:
   order and the same number of entries as written lines where you can.
 - parts: one entry per written part line. qty is the count of items (5L of oil is 1).
   Set "sku" only if a catalogue part is clearly the same item AND fits this car.
+- parts price_dollars: only a price actually written for that part (inc GST), else null.
 - labour_hours: decimal hours ("1 1/2" -> 1.5).
+- paid_method: "eftpos", "cash" or "transfer" only if the card says it was paid, else "".
 - title: a short job title for the invoice, under 60 characters.
 
 Reply with JSON only:
 {"customer_name": str|null, "phone": str|null, "vehicle": {"make": str, "model": str, "year": int|null}|null,
  "rego": str|null, "odometer_km": int|null, "labour_hours": number|null,
- "work_done": [str], "parts": [{"description": str, "qty": number, "sku": str|null}],
+ "work_done": [str], "parts": [{"description": str, "qty": number, "sku": str|null, "price_dollars": number|null}], "paid_method": str,
  "mechanic": str|null, "notes": str|null, "title": str, "doubts": {"<field>": "<reason>"}}"""
 
 
@@ -136,6 +138,7 @@ def tidy_with_nemotron(merged: dict[str, Any], catalogue: list[dict[str, Any]]) 
         "fields": merged["fields"],
         "work_done_lines": merged["lists"].get("work_done", []),
         "parts_lines": merged["lists"].get("parts", []),
+        "other_writing": [x["raw"] for x in merged["lists"].get("other", [])],
         "hard_to_read": sorted(merged["unclear"]),
     }
     cat = [{"sku": p["sku"], "name": p["name"]} for p in catalogue if p.get("sku")]
@@ -255,8 +258,8 @@ def build_draft(s: Session, readings: list[dict[str, Any]], *, use_llm: bool) ->
     by_sku = {p["sku"]: p for p in catalogue if p.get("sku")}
     part_lines = merged["lists"].get("parts", [])
     tidy_parts = [p for p in (tidy or {}).get("parts") or [] if isinstance(p, dict) and p.get("description")]
-    # (description, qty, as written, catalogue hit, agreement)
-    items: list[tuple[str, float, str | None, dict[str, Any] | None, str]] = []
+    # (description, qty, as written, catalogue hit, agreement, written price)
+    items: list[tuple[str, float, str | None, dict[str, Any] | None, str, float | None]] = []
     if tidy_parts:
         same = len(tidy_parts) == len(part_lines)
         for i, p in enumerate(tidy_parts):
@@ -270,11 +273,18 @@ def build_draft(s: Session, readings: list[dict[str, Any]], *, use_llm: bool) ->
                 qty = float(p.get("qty") or 1)
             except (TypeError, ValueError):
                 qty = 1.0
-            items.append((str(p["description"]), qty, pl["raw"] if pl else None, hit, pl["agreement"] if pl else "single"))
+            try:
+                written = float(p["price_dollars"]) if p.get("price_dollars") not in (None, "") else None
+            except (TypeError, ValueError):
+                written = None
+            if written is None and pl:
+                written = nz.price(pl["raw"])[1]  # a price the model dropped is still on the card
+            items.append((str(p["description"]), qty, pl["raw"] if pl else None, hit, pl["agreement"] if pl else "single", written))
     else:
         for pl in part_lines:
-            desc, qty = nz.part_line(pl["raw"])
-            items.append((desc, qty, pl["raw"], nz.match_part(desc, catalogue, veh), pl["agreement"]))
+            text, written = nz.price(pl["raw"])
+            desc, qty = nz.part_line(text)
+            items.append((desc, qty, pl["raw"], nz.match_part(desc, catalogue, veh), pl["agreement"], written))
 
     hours_v = draft.labour_hours.value
     if draft.work_done or hours_v:
@@ -283,16 +293,20 @@ def build_draft(s: Session, readings: list[dict[str, Any]], *, use_llm: bool) ->
             DraftLine(kind="labour", description=summary, qty=float(hours_v or 0), raw=draft.labour_hours.raw,
                       confidence=draft.labour_hours.confidence, note=draft.labour_hours.note)
         )
-    for desc, qty, raw, hit, agreement in items:
+    for desc, qty, raw, hit, agreement, written in items:
         conf = BASE[agreement]
         note = "The two readings of the card don't match." if agreement == "disagree" else None
-        if not hit:
+        if not hit and written is None:
             conf, note = min(conf, 0.6), note or "Not in the parts list, so there's no price for it yet."
         draft.lines.append(
             DraftLine(kind="part", description=hit["name"] if hit else desc, qty=qty, raw=raw,
-                      unit_cents=hit["sell_cents"] if hit else None, part_id=hit["id"] if hit else None,
+                      unit_cents=hit["sell_cents"] if hit else None, part_id=hit["id"] if hit else None, price_dollars=written,
                       sku=hit["sku"] if hit else None, confidence=round(conf, 2), note=note)
         )
+
+    paid = str((tidy or {}).get("paid_method") or "").lower()
+    everything = [x["raw"] for v in merged["lists"].values() for x in v] + [f["notes"]["raw"]]
+    draft.paid_method = paid if paid in ("eftpos", "cash", "transfer") else nz.paid_method(everything)
 
     _match_records(s, draft)
     for name in REQUIRED:
@@ -405,17 +419,17 @@ def _finish(d: JobDraft) -> None:
             if name not in SPOKEN:
                 continue  # flagged in the app, but not worth interrupting him for
             if fld.value in (None, ""):
-                d.readback.append(QUESTIONS[name])
+                d.ask(name, QUESTIONS[name])
             else:
-                d.readback.append(f"{label}: {_spoken(name, fld)}. {fld.note or 'Is that right?'}")
+                d.ask(name, f"{label}: {_spoken(name, fld)}. {fld.note or 'Is that right?'}")
     for w in d.work_done:
         w.needs_check = w.confidence < CHECK_BELOW
         if w.needs_check:
-            d.readback.append(f"Work: {w.value}. {w.note or 'Is that right?'}")
+            d.ask("work_done", f"Work: {w.value}. {w.note or 'Is that right?'}")
     for line in d.lines:
         line.needs_check = line.confidence < CHECK_BELOW
         if line.needs_check and line.kind == "part":
-            d.readback.append(f"Part: {line.description}. {line.note or 'Is that right?'}")
+            d.ask("part", f"Part: {line.description}. {line.note or 'Is that right?'}")
     key = [getattr(d, n).confidence for n in REQUIRED] + [w.confidence for w in d.work_done]
     d.overall_confidence = round(min(key) if key else 0.0, 2)
 
@@ -451,5 +465,4 @@ def scan_jobcard(s: Session, original: bytes) -> JobDraft:
     d = build_draft(s, readings, use_llm=use_llm)
     d.photo_id = photo_id
     d.models["seconds"] = round(time.monotonic() - t0, 1)
-    svc.log_event(s, "owner", "jobcard_scanned", f"{d.title} ({d.overall_confidence:.0%} sure)")
     return d

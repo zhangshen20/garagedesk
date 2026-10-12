@@ -25,6 +25,7 @@ from app import db, models  # noqa: E402,F401
 from app.seed import seed_if_empty  # noqa: E402
 from app.vision.jobcard import scan_jobcard  # noqa: E402
 from app.vision.reader import SAMPLES_DIR  # noqa: E402
+from app.vision.to_job import to_owner_draft  # noqa: E402
 
 
 def score(d: dict, exp: dict) -> list[str]:
@@ -58,8 +59,10 @@ def main() -> None:
         s.commit()
         for p in paths:
             t = time.monotonic()
-            d = scan_jobcard(s, p.read_bytes()).model_dump()
+            card = scan_jobcard(s, p.read_bytes())
             took = time.monotonic() - t
+            owner = to_owner_draft(s, card)
+            d = card.model_dump()
             print(f"\n=== {p.name}  ({took:.1f}s, overall {d['overall_confidence']:.0%}, models {d['models']})")
             print("title:", d["title"])
             for k in ("customer_name", "phone", "vehicle", "rego", "odometer_km", "labour_hours", "mechanic", "notes"):
@@ -70,7 +73,7 @@ def main() -> None:
                 print(f"  work           {w['value']!r:40} {w['confidence']:.2f}")
             for l in d["lines"]:
                 print(f"  line {l['kind']:6} {l['description'][:38]!r:40} qty {l['qty']:g} {l['unit_cents']} {l['confidence']:.2f}")
-            print("  readback:", d["readback"])
+            print("  owner app says:", owner["readback"])
             truth = p.with_suffix(".json")
             if truth.exists():
                 misses = score(d, json.loads(truth.read_text())["expected"])

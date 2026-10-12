@@ -28,22 +28,30 @@ comes with a confidence score, so the app only reads back the parts it isn't sur
    sentence the app can say aloud, for example "Phone: 0412 345 678. New number? On file
    it's 0411 000 001."
 
-The draft is never saved on its own. The owner confirms it first. The schema is in
-`backend/app/vision/schema.py`, and the shared contract with the owner app is in
-`/mnt/project-files/garagedesk/shared-contract.md`.
+6. **Hand it to the owner app.** `JobDraft.to_extract()` gives the same dict that
+   Talk-to-Invoice produces, so `apply_to_job` and `readback` from `agent/jobcard.py`
+   price the parts and labour and build the reply exactly as they do for a spoken job. The
+   job is found by rego only. Loose word matching would put a new customer's Ranger on
+   another customer's Ranger job. Doubts about the customer, rego, car, labour or work
+   become `warnings`, so the app holds Send until they're fixed. A changed phone number is
+   read out but does not hold anything. A part the reader found doesn't fit this car (for
+   example Ranger pads when we only stock Corolla pads) is left unpriced, not billed as the
+   wrong part.
+
+The schema is in `backend/app/vision/schema.py`.
 
 ## API
 
 | Route | What it does |
 |---|---|
-| `POST /api/jobcards/scan` | multipart field `photo` -> JobDraft |
-| `POST /api/jobcards/samples/{name}/scan` | JobDraft for a bundled sample card (demo without a phone) |
-| `GET /api/jobcards/samples` | names of the sample cards |
-| `GET /api/jobcards/photos/{photo_id}.jpg` | the stored photo behind a draft |
+| `POST /api/jobcards/scan` | `{image_b64, mime}`, same as `/api/owner/photo` -> the same draft response plus `jobcard` (per-field confidence) |
+| `POST /api/jobcards/samples/{name}/scan` | the same, for a bundled sample card (demo without a phone) |
+| `GET /api/jobcards/samples` | names of the sample cards; `GET /api/jobcards/samples/{name}.jpg` serves one |
+| `GET /api/jobcards/photos/{photo_id}.jpg` | the stored photo; its link is also added to the job's notes |
 
 Without `NEBIUS_API_KEY` (mock mode), the sample cards are read from their ground truth
 and simple rules do the tidying. Everything else runs the real code, so CI covers the
-merging, confidence, record checks and read-back.
+merging, confidence, record checks, read-back and the hand-off to the job.
 
 ## Live results (2026-10-12, Token Factory)
 
@@ -52,12 +60,12 @@ merging, confidence, record checks and read-back.
 and use a slanted font with per-letter jitter, so they imitate handwriting rather than
 being real handwriting:
 
-| Card | Time | Every field right | Read back |
+| Card | Time | Every field right | What the owner app says beyond the invoice |
 |---|---|---|---|
-| neat service (known customer) | 8.2 s | yes | new phone number vs the one on file |
-| messy brakes (blur, coffee ring) | 7.9 s | yes | two parts with no catalogue price (Ranger pads) |
-| partial battery (new customer) | 7.1 s | yes | "What's the customer's phone number?" |
-| dim tyres (dark, shadow, 7° tilt) | 8.7 s | yes | rego on file for another customer; new number |
+| neat service (known customer) | 9.6 s | yes | "Phone: 0412 345 678. New number? On file it's 0411 000 001. Send it?" |
+| messy brakes (blur, coffee ring) | 8.7 s | yes | walk-in opened for the new Ranger; no price for the Ranger pads or the DOT4 |
+| partial battery (new customer) | 6.3 s | yes | "What's the customer's phone number?" |
+| dim tyres (dark, shadow, 7° tilt) | 11.7 s | yes | held: "Rego XYZ789 is on file for Priya Patel, but the card says Sione Tupou." |
 
 Next step: run real photos of the shop's own cards through
 `jobcard_live_eval.py photo.jpg` and tune the prompt if needed.

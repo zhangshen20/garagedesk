@@ -1,6 +1,7 @@
-"""Job card photo endpoints.
+"""Job card photo endpoints: the careful reader in front of the owner app's pipeline.
 
-  POST /api/jobcards/scan                 multipart "photo" (iPhone camera upload) -> JobDraft
+  POST /api/jobcards/scan                 {image_b64, mime} like /api/owner/photo -> the same
+                                          draft response, plus "jobcard" (per-field confidence)
   POST /api/jobcards/samples/{name}/scan  same, using a bundled sample card (demo, no phone)
   GET  /api/jobcards/samples              names of the bundled sample cards
   GET  /api/jobcards/samples/{name}.jpg   a sample card image
@@ -8,38 +9,52 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import re
+from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlmodel import Session
 
 from ..db import get_session
 from .jobcard import photos_dir, scan_jobcard
 from .reader import SAMPLES_DIR, sample_names
-from .schema import JobDraft
+from .to_job import to_owner_draft
 
 router = APIRouter(prefix="/api/jobcards", tags=["jobcards"])
 
 MAX_BYTES = 20 * 1024 * 1024
 
 
-def _scan(s: Session, data: bytes) -> JobDraft:
+def _scan(s: Session, data: bytes) -> dict[str, Any]:
     try:
-        draft = scan_jobcard(s, data)
+        card = scan_jobcard(s, data)
     except ValueError as e:
         raise HTTPException(415, str(e)) from e
+    out = to_owner_draft(s, card)
     s.commit()
-    return draft
+    return out
 
 
-@router.post("/scan", response_model=JobDraft)
-async def scan(photo: UploadFile = File(...), s: Session = Depends(get_session)) -> JobDraft:
-    data = await photo.read()
+class PhotoIn(BaseModel):
+    image_b64: str
+    mime: str = "image/jpeg"
+
+
+@router.post("/scan")
+def scan(body: PhotoIn, s: Session = Depends(get_session)) -> dict[str, Any]:
+    b64 = body.image_b64.split(",", 1)[-1]  # a data: URL is fine too
+    if len(b64) > MAX_BYTES * 4 // 3:
+        raise HTTPException(413, "That photo is too big. Take it again at normal size.")
+    try:
+        data = base64.b64decode(b64, validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise HTTPException(400, "The photo didn't come through. Try again.") from e
     if not data:
         raise HTTPException(400, "The photo was empty.")
-    if len(data) > MAX_BYTES:
-        raise HTTPException(413, "That photo is too big. Take it again at normal size.")
     return _scan(s, data)
 
 
@@ -59,8 +74,8 @@ def sample_image(name: str) -> FileResponse:
     return FileResponse(_sample_path(name), media_type="image/jpeg")
 
 
-@router.post("/samples/{name}/scan", response_model=JobDraft)
-def scan_sample(name: str, s: Session = Depends(get_session)) -> JobDraft:
+@router.post("/samples/{name}/scan")
+def scan_sample(name: str, s: Session = Depends(get_session)) -> dict[str, Any]:
     return _scan(s, _sample_path(name).read_bytes())
 
 

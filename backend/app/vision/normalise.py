@@ -99,6 +99,22 @@ def odometer(raw: str) -> tuple[int | None, bool]:
     return int(km), 0 < km < 1_500_000
 
 
+def price(raw: str) -> tuple[str, float | None]:
+    """'Pads $119' -> ('Pads', 119.0). Only a figure with a dollar sign counts."""
+    m = re.search(r"\$\s*(\d+(?:,\d{3})*(?:\.\d{1,2})?)", raw or "")
+    if not m:
+        return raw, None
+    return (raw[: m.start()] + raw[m.end() :]).strip(" -,:@"), float(m.group(1).replace(",", ""))
+
+
+def paid_method(texts: list[str]) -> str:
+    for t in texts:
+        m = re.search(r"\bpaid\b.*?\b(eftpos|card|cash|transfer|eft|bank)\b", (t or "").lower())
+        if m:
+            return {"card": "eftpos", "eft": "eftpos", "bank": "transfer"}.get(m.group(1), m.group(1))
+    return ""
+
+
 def part_line(raw: str) -> tuple[str, float]:
     """'Oil filter x1' -> ('Oil filter', 1); '2 x wiper blades' -> ('wiper blades', 2).
     Litres and sizes ('5L', 'DIN55') are part of the description, not a quantity."""

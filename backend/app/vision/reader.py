@@ -38,6 +38,7 @@ KEYS = [
     "labour_hours",
     "mechanic",
     "notes",
+    "other",
 ]
 
 PROMPT = """You are reading a photo of a car mechanic's paper job card.
@@ -50,6 +51,7 @@ Reply with JSON only, these keys:
   "work_done": [one string per written line],
   "parts": [one string per written line],
   "labour_hours", "mechanic", "notes",
+  "other": [anything else written on the card, e.g. prices or "paid EFTPOS", one string per line],
   "unclear": [keys of any box where a character was hard to read]"""
 
 MAX_SIDE = 1600
@@ -96,7 +98,7 @@ def clean_reading(d: dict[str, Any]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for k in KEYS:
         v = d.get(k)
-        if k in ("work_done", "parts"):
+        if k in ("work_done", "parts", "other"):
             if isinstance(v, str):
                 v = [x for x in v.split("\n")]
             out[k] = [str(x).strip() for x in (v or []) if str(x).strip()]
@@ -183,6 +185,7 @@ def mock_read(original: bytes) -> list[dict[str, Any]]:
     r: dict[str, Any] = {v: written.get(k, "") for k, v in _FROM_SAMPLE.items()}
     r["work_done"] = [x for x in written.get("work", "").split("\n") if x]
     r["parts"] = [x for x in written.get("parts", "").split("\n") if x]
+    r["other"] = [x for x in written.get("other", "").split("\n") if x]
     r["unclear"] = []
     r["is_job_card"] = True
     return [{"model": f"mock/{m.split('/')[-1]}", **r} for m in vision_models()]

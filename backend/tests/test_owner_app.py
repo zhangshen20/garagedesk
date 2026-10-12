@@ -176,3 +176,9 @@ def test_speech_hint_lists_cars_in_the_shop(client):
     with session_scope() as s:
         hint = _cars_in_shop(s)
     assert "ABC123" in hint and "1KR9ZZ" in hint
+
+
+def test_misheard_labour_is_put_back():
+    from app.agent.stt import _fix_words
+
+    assert _fix_words("Mazda 1KR9ZZ, oil and filter, label 120.") == "Mazda 1KR9ZZ, oil and filter, labour 120."

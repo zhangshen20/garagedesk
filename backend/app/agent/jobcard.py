@@ -92,6 +92,7 @@ def extract(text: str) -> tuple[dict[str, Any], str]:
         json_mode=True,
         max_tokens=2000,
         temperature=0,
+        think=False,
     )
     return _parse_json(r.content or ""), r.model
 
@@ -171,6 +172,13 @@ def _job_from_todays_booking(s: Session, hint: str, rego: str) -> Job | None:
     return j
 
 
+def _vehicle_words(car: str, name: str, rego: str) -> str:
+    """'Ben Lee's Toyota Hilux BEN001' -> 'Toyota Hilux'."""
+    drop = _words(name) | {rego.lower(), "rego", "walk", "in", "the", "his", "her", "new", "customer"}
+    words = [w for w in re.findall(r"[A-Za-z0-9-]+", car.replace("'s", "")) if w.lower() not in drop and _rego_key(w) != _rego_key(rego)]
+    return " ".join(words)
+
+
 def find_or_open_job(s: Session, ex: dict[str, Any]) -> Job | None:
     hint = " ".join(str(ex.get(k) or "") for k in ("car", "customer_name"))
     rego = str(ex.get("rego") or "")
@@ -182,7 +190,7 @@ def find_or_open_job(s: Session, ex: dict[str, Any]) -> Job | None:
         return job
     if rego and ex.get("customer_name"):
         # a walk-in nobody booked: new customer, car and job
-        c, v = svc.find_or_create_customer(s, name=str(ex["customer_name"]), phone="", rego=rego, vehicle=str(ex.get("car") or ""))
+        c, v = svc.find_or_create_customer(s, name=str(ex["customer_name"]), phone="", rego=rego, vehicle=_vehicle_words(str(ex.get("car") or ""), str(ex["customer_name"]), rego))
         j = Job(customer_id=c.id, vehicle_id=v.id if v else None, title=str(ex.get("labour_description") or "Workshop job"), status=JobStatus.in_progress)
         s.add(j)
         s.flush()
@@ -382,6 +390,24 @@ def draft_from_text(s: Session, text: str, transcript_model: str = "") -> Draft:
     return draft_from_extracted(s, ex, text, " + ".join(m for m in (transcript_model, model) if m))
 
 
+def _has_work(ex: dict[str, Any]) -> bool:
+    return any(_num(ex.get(k)) for k in ("labour_hours", "labour_dollars", "total_dollars")) or bool(ex.get("parts")) or bool(ex.get("fees"))
+
+
+def _not_found(s: Session, ex: dict[str, Any]) -> str:
+    """Say what we looked for and offer the nearest jobs, never a flat "not found"."""
+    from .joblookup import describe, search_jobs
+
+    car = " ".join(str(ex.get(k) or "") for k in ("car", "rego")).strip()
+    found = search_jobs(s, car=car, customer=str(ex.get("customer_name") or ""), status="open")
+    near = [j for j in found.get("nearest", []) if j["status"] not in ("invoiced", "paid")]
+    what = car or str(ex.get("customer_name") or "") or "which car it was"
+    text = f"I couldn't match {what} to a job or a booking."
+    if near:
+        text += " Open jobs: " + "; ".join(describe(j) for j in near) + "."
+    return text + " Say the rego, or the customer's name and the car, and I'll open it."
+
+
 def draft_from_extracted(s: Session, ex: dict[str, Any], transcript: str = "", model: str = "") -> Draft:
     """Find the job, price it and build the read-back from an already extracted dict.
     Other readers (the hardened photo reader, booking prefill) enter here."""
@@ -389,10 +415,16 @@ def draft_from_extracted(s: Session, ex: dict[str, Any], transcript: str = "", m
         return Draft(ok=False, readback="Sorry, I didn't get that. Try again: say the car, what you did, and how long it took.", transcript=transcript, model=model)
     job = find_or_open_job(s, ex)
     if not job:
-        car = ex.get("car") or "that car"
-        return Draft(ok=False, readback=f"I couldn't find {car} in today's jobs. Say the rego and the customer's name.", transcript=transcript, extracted=ex, model=model)
+        return Draft(ok=False, readback=_not_found(s, ex), transcript=transcript, extracted=ex, model=model)
+    if not _has_work(ex):
+        # "Corolla's done, invoice it": he gave no work or money, so keep what's on the job
+        from .joblookup import prepare_invoice
+
+        d = prepare_invoice(s, job)
+        return Draft(ok=d["ok"], job=d["job"], readback=d["readback"], transcript=transcript, extracted=ex, model=model)
     if job.status in (JobStatus.invoiced, JobStatus.paid):
-        return Draft(ok=False, readback="That job is already invoiced.", transcript=transcript, extracted=ex, model=model)
+        v = svc.job_view(s, job)
+        return Draft(ok=False, readback=f"{(v['customer'] or 'That').split()[0]}'s {' '.join(v['vehicle'].split()[:2])} is already invoiced ({v['invoice_number']}).", transcript=transcript, extracted=ex, model=model)
     warnings = apply_to_job(s, job, ex)
     view = svc.job_view(s, job)
     paid = str(ex.get("paid_method") or "").lower()

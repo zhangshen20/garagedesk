@@ -60,6 +60,7 @@ def seed(s: Session) -> None:
         ("Ahmed Hassan", "+61411000006", None, "AH5566", "Honda", "Civic", 2012, 188000),
         ("Grace Chen", "+61411000007", "grace.c@example.com", "GC8899", "Subaru", "Forester", 2017, 90000),
         ("Tom Baker", "+61411000008", None, "TB1234", "Holden", "Commodore", 2013, 165000),
+        ("Dan Walker", "+61411000009", None, "DW4521", "Nissan", "X-Trail", 2015, 132000),
     ]
     customers: dict[str, Customer] = {}
     vehicles: dict[str, Vehicle] = {}
@@ -72,6 +73,11 @@ def seed(s: Session) -> None:
         s.flush()
         customers[rego], vehicles[rego] = c, v
 
+    def ago(days: int) -> datetime:
+        """Mid-afternoon, shop time, `days` ago, stored as naive UTC like every timestamp."""
+        lo, _ = svc.utc_bounds(today - timedelta(days=days), today - timedelta(days=days))
+        return lo + timedelta(hours=15)
+
     def book(rego: str, day_offset: int, hhmm: str, service: str, status: BookingStatus = BookingStatus.confirmed, source: str = "phone") -> Booking:
         c, v = customers[rego], vehicles[rego]
         d = today + timedelta(days=day_offset)
@@ -82,7 +88,7 @@ def seed(s: Session) -> None:
 
     # Yesterday: finished and paid / finished and invoiced
     b1 = book("XYZ789", -1, "08:00", "Logbook service", BookingStatus.completed)
-    j1 = Job(booking_id=b1.id, customer_id=customers["XYZ789"].id, vehicle_id=vehicles["XYZ789"].id, title="Logbook service", status=JobStatus.done, mechanic_notes="Rear pads 40%, mention next time.")
+    j1 = Job(booking_id=b1.id, customer_id=customers["XYZ789"].id, vehicle_id=vehicles["XYZ789"].id, title="Logbook service", status=JobStatus.done, mechanic_notes="Rear pads 40%, mention next time.", created_at=ago(1), updated_at=ago(1))
     s.add(j1)
     s.flush()
     s.add_all([
@@ -93,12 +99,12 @@ def seed(s: Session) -> None:
     ])
     s.flush()
     inv1 = svc.issue_invoice(s, j1)
-    inv1.issued_at = datetime.utcnow() - timedelta(days=1)
+    inv1.issued_at = ago(1)
     pay1 = svc.record_payment(s, inv1, inv1.total_cents, "eftpos", "EFT-7781")
-    pay1.paid_at = datetime.utcnow() - timedelta(days=1)
+    pay1.paid_at = ago(1)
 
     b2 = book("TB1234", -3, "09:00", "Brake pads and rotors", BookingStatus.completed)
-    j2 = Job(booking_id=b2.id, customer_id=customers["TB1234"].id, vehicle_id=vehicles["TB1234"].id, title="Brake pads and rotors", status=JobStatus.done)
+    j2 = Job(booking_id=b2.id, customer_id=customers["TB1234"].id, vehicle_id=vehicles["TB1234"].id, title="Brake pads and rotors", status=JobStatus.done, created_at=ago(3), updated_at=ago(3))
     s.add(j2)
     s.flush()
     s.add_all([
@@ -107,8 +113,18 @@ def seed(s: Session) -> None:
     ])
     s.flush()
     inv2 = svc.issue_invoice(s, j2)
-    inv2.issued_at = datetime.utcnow() - timedelta(days=3)
+    inv2.issued_at = ago(3)
     inv2.due_at = today - timedelta(days=1)  # overdue, for the report to chase
+
+    # Yesterday: finished but nobody has done the invoice yet ("do yesterday's invoice")
+    b5 = book("DW4521", -1, "10:00", "Rear brakes squealing", BookingStatus.completed)
+    j5 = Job(booking_id=b5.id, customer_id=customers["DW4521"].id, vehicle_id=vehicles["DW4521"].id, title="Rear brake pads - X-Trail", status=JobStatus.done, mechanic_notes="Rear pads replaced, rotors within spec.", created_at=ago(1), updated_at=ago(1))
+    s.add(j5)
+    s.flush()
+    s.add_all([
+        JobLine(job_id=j5.id, kind=LineKind.labour, description="Replace rear brake pads", qty=1, unit_cents=12000),
+        JobLine(job_id=j5.id, kind=LineKind.part, description="Brake pads rear - Nissan X-Trail", qty=1, unit_cents=9900),
+    ])
 
     # Today's board
     b3 = book("ABC123", 0, "08:00", "Front brakes grinding", BookingStatus.checked_in)

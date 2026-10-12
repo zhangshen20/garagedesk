@@ -35,6 +35,9 @@ One huge talk button: hold it and talk, let go to send (a tap to start and a tap
 | He does | GarageDesk does |
 |---|---|
 | Holds the button and says what he'd tell his wife, then lets go: *"Corolla ABC123, front pads, hour and a half, 350 all up."* | Nemotron 3 Nano routes it in under a second; Nemotron 3 Super turns it into line items as JSON; code finds the job and uses his figures as the charge: a price per item, a labour amount, or a total ("350 all up" puts the balance after parts on the labour line). Only prices he didn't say come from the shop's parts list, and labour from $120 an hour plus GST. The draft is read back out loud: *"Maria's Corolla. Front brake pads and an hour and a half labour. Three hundred and fifty dollars all up. Send it to Jenny?"* He says "yep" and it goes to his wife. "Hear every line" reads each line and the GST. |
+| Says *"Liam's Ranger, did the battery again, same as last time"* | Looks up the Ranger's last visit and drafts the same battery and labour at last visit's figures: $366.00 all up |
+| Corrects or adds: *"actually make it 380 all up"*, *"add oil and a filter to that"* | Changes only what he changed, on the job he was just talking about |
+| Asks *"when was Maria's Corolla last in?"*, *"what's he driving?"*, or says *"remember Jack always pays cash"* | Answers from the shop's records and remembers facts he gives it |
 | Says *"Find yesterday's jobs and prepare invoice"* | Nemotron Nano pulls out the day, rego, customer, car or status; code finds the job (Dan's X-Trail, finished yesterday) and the invoice draft is read back: $240.90 all up |
 | Taps "Add parts from a receipt photo" on the draft and photographs the supplier's receipt | A vision model on Token Factory (MiniCPM-V 4.5) reads it, adds each part to the job at cost, books the receipt as a parts expense with its GST, and reads back the new total |
 | Says *"The CX-5 is waiting on parts till Thursday"* | Texts that customer, so fewer people walk in to ask |
@@ -61,6 +64,7 @@ Bookings made on the shop's website flow onto the board, and a job opens prefill
 |---|---|
 | Owner phone app, hold to talk in any browser, spoken read-back | Built |
 | Find jobs by day, rego, customer, car or status | Built |
+| Remembers the conversation, each customer and car, past visits and his notes; mechanic know-how | Built |
 | Talk-to-Invoice | Built |
 | Supplier receipt photo adds parts and books the expense | Built |
 | Wife approves or fixes from a text link | Built |
@@ -130,6 +134,7 @@ scheduler ─4pm / 5:45pm─────────────────▶ 
 - `backend/app/agent/tools.py`: the agent tools, schema and implementation side by side.
 - `backend/app/agent/frontdesk.py`, `backoffice.py`, `report.py`: the agents and their prompts.
 - `backend/app/agent/joblookup.py`: finds jobs by day, rego, customer, car or status. `backend/tests/owner_utterances.py` holds 47 real owner phrasings run on every PR; `backend/scripts/owner_eval_live.py` runs them on live Nemotron.
+- `backend/app/agent/memory.py`, `memory_tools.py`, `knowhow.py`: the owner agent's memory (recent turns, past visits, facts he asked it to keep) and its mechanic knowledge (common jobs, typical times, misheard car names). `backend/scripts/memory_live_eval.py` runs 12 multi-turn conversations on live Nemotron.
 - `backend/app/voice/`: the short spoken read-back and the "yep" that answers the last question; `backend/app/agent/stt.py` and `backend/app/voice/tts.py` for speech.
 - `backend/app/services.py`: bookings, bays, GST, invoices, purchase orders, approvals. No LLM calls.
 - `frontend/`: Vite + React + Tailwind, built into `backend/static` and served by FastAPI.

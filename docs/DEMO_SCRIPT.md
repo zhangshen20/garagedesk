@@ -26,19 +26,24 @@ Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 
 *The phone says, in a natural voice: "Maria's Corolla. Front brake pads and an hour and a half labour. Three hundred and fifty dollars all up. Send it to Jenny?" He holds the button and says "yep".*
 
-"It reads it back in one breath, the way his wife would have, and asks the next question for him. He says yep and it's sent. If something's off, he just says it again, and "Hear every line" reads out each line and the GST."
+"It reads it back in one breath, the way his wife would have, and asks the next question for him. He says yep and it's sent. If something's off he just corrects it, "make it 380 all up", and it keeps everything else he said. "Hear every line" reads out each line and the GST."
 
-## 1:05–1:20  Yesterday's job he forgot
+## 1:05–1:15  Yesterday's job he forgot
 *Hold the button: "Find yesterday's jobs and prepare invoice." The draft for Dan's Nissan X-Trail, rear brake pads, comes up and is read back: $240.90 all up. Say "yep".*
 
-"He doesn't need dates or job numbers. Yesterday, a rego, a customer's name, the car or "what's waiting to be invoiced": it finds the job and has the invoice ready.
+"He doesn't need dates or job numbers. Yesterday, a rego, a customer's name, the car or "what's waiting to be invoiced": it finds the job and has the invoice ready."
 
-## 1:20–1:30  A parts receipt instead of a list
+## 1:15–1:25  "Same as last time"
+*Hold the button: "Liam's Ranger, did the battery again, same as last time." The draft comes up with last visit's battery and half hour of labour, read back at $366.00 all up.*
+
+"It remembers every car that's been in: past visits, what they cost, his notes. "Same as last time" uses last time's real figures, not a guess."
+
+## 1:25–1:35  A parts receipt instead of a list
 *A second job: he says "CX-5 1KR9ZZ, machined the rotors, one hour labour", then taps "Add parts from a receipt photo" on the draft and shoots the supplier's receipt. The parts appear on the job and the new total is read back.*
 
 "If there's a long list of parts, he doesn't read it out. He photographs the supplier's receipt. A vision model on Nebius puts the parts on the job and books the receipt as an expense, GST and all."
 
-## 1:30–1:55  His wife approves from her other job
+## 1:35–1:55  His wife approves from her other job
 *Second phone: the text arrives. Tap the link, show the invoice with GST split out, tap "Approve and send".*
 
 "Instead of a phone call, his wife gets a text. She checks the invoice on her break and taps once. She stays in control of the books without being in the shop. If something's wrong she taps Fix, writes a note, and it goes back to him. A five-minute interruption for two people becomes a three-second tap for one."
@@ -49,9 +54,9 @@ Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 "Maria knows her car is ready before she walks in, and she gets a proper Australian tax invoice. The phone tells him his wife approved it, and when Maria pays on the EFTPOS terminal he just says yes, and the receipt goes out. The shop has no accounting software, and now it doesn't need any."
 
 ## 2:15–2:35  The rest of his day
-*Hold the button: "The CX-5 will be ready tomorrow afternoon." Show that customer's text. Then a fast montage, 3 seconds each: a customer booking a service in the web chat; "need front pads for the Mazda" turning into a parts order with a Tavily-found price waiting on Approvals; the Nemotron 3 Ultra end-of-day report.*
+*Hold the button: "The CX-5 will be ready tomorrow afternoon." Show that customer's text. Then "remember Jack always pays cash" and, later, "how does Jack usually pay?" answered out loud. Then a fast montage, 3 seconds each: a customer booking a service in the web chat; "need front pads for the Mazda" turning into a parts order with a Tavily-found price waiting on Approvals; the Nemotron 3 Ultra end-of-day report.*
 
-"Status updates text the customer, so nobody needs to come in and ask. And behind that one button is a whole back office: a front desk that answers customers and books cars, parts prices searched live with Tavily, and an end-of-day report written by Nemotron 3 Ultra."
+"Status updates text the customer, so nobody needs to come in and ask. Anything he tells it to remember, it remembers. And behind that one button is a whole back office: a front desk that answers customers and books cars, parts prices searched live with Tavily, and an end-of-day report written by Nemotron 3 Ultra."
 
 ## 2:35–2:50  Close
 *Back to the owner under a car. Text overlay: "Admin calls to his wife: several a day → none." Then the GarageDesk name and the repo URL.*
@@ -65,11 +70,12 @@ Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 | 1 | Owner with a calculator, then "Calling: Wife" on his phone | Workshop footage |
 | 2 | Hold to talk with his own figures, let go, words appear, short spoken read-back, "yep" sends | Owner app on the iPhone |
 | 2b | "Find yesterday's jobs and prepare invoice" brings up Dan's X-Trail at $240.90 | Owner app on the iPhone |
+| 2c | "Liam's Ranger, did the battery again, same as last time" read back at $366.00 | Owner app on the iPhone |
 | 3 | Photo of a supplier receipt, parts land on the job | Owner app on the iPhone |
 | 4 | Text arrives, approve page with GST, tap "Approve and send" | Second phone |
 | 5 | "Your car is ready" text and the invoice PDF | Outbox, phone-sized window |
 | 6 | "Jenny approved" spoken on his phone, "yes" marks Paid EFTPOS, receipt text | Owner app, then Outbox |
-| 7 | "CX-5 ready tomorrow" by voice, customer text | Owner app, then Outbox |
+| 7 | "CX-5 ready tomorrow" by voice, customer text; "remember Jack always pays cash", then "how does Jack usually pay?" | Owner app, then Outbox |
 | 8 | Customer booking in the web chat | /chat |
 | 9 | Parts order with a Tavily price waiting on Approvals | Dashboard |
 | 10 | Ultra end-of-day report | Dashboard, Report page |

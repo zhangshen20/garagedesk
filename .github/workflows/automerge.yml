@@ -1,0 +1,43 @@
+name: Auto-merge
+
+# Merges Claude's pull requests (branches starting with claude/) into main
+# once the CI workflow has passed on the PR's latest commit. Draft PRs and
+# PRs whose CI failed are left alone. Set an AUTOMERGE_TOKEN repository secret
+# (a fine-grained PAT with contents + pull-requests write) if the merge should
+# also trigger CI and Deploy on main; merges made with the default
+# GITHUB_TOKEN do not start other workflows.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: automerge-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      startsWith(github.event.workflow_run.head_branch, 'claude/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge the PR if it is ready
+        env:
+          GH_TOKEN: ${{ secrets.AUTOMERGE_TOKEN || github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          pr=$(gh pr list --head "$BRANCH" --base main --state open --json number,isDraft,headRefOid \
+                 --jq '.[] | select(.isDraft == false) | "\(.number) \(.headRefOid)"' | head -n1)
+          if [ -z "$pr" ]; then echo "No open, non-draft PR from $BRANCH"; exit 0; fi
+          read -r number head <<< "$pr"
+          if [ "$head" != "$SHA" ]; then echo "PR #$number moved on since CI ran; waiting for the next CI run"; exit 0; fi
+          gh pr merge "$number" --squash --delete-branch --match-head-commit "$SHA"

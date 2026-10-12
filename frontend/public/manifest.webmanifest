@@ -1,0 +1,9 @@
+{
+  "name": "GarageDesk Owner",
+  "short_name": "GarageDesk",
+  "start_url": "/owner",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [{ "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }]
+}

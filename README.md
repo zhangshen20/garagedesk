@@ -19,7 +19,7 @@ GarageDesk takes that exact phone call. He says the same words to his phone inst
 Invoicing software assumes someone sitting at a desk. He will never be that person. So GarageDesk is built around five rules:
 
 1. **Say it the way he'd say it on the phone. Never type.** His own words and his own figures, one big button.
-2. **Works with dirty hands.** One press-and-hold button you can hit with a knuckle. No login mid-job.
+2. **Works with dirty hands.** One big button you tap with a knuckle: tap to talk, tap when done. No login mid-job.
 3. **His numbers, read back before it leaves.** The amounts he says are the charge. The invoice is read to him in one sentence, and he says yes or no.
 4. **His wife stays in control, from anywhere.** She approves every invoice with one tap on her phone.
 5. **It knows the shop already.** Customer, car, rego and booked service come from the booking, so he only says what is different.
@@ -30,11 +30,11 @@ Success is one number: admin calls to his wife per day, from several to none.
 
 ### For the owner: `/owner`, a phone web app on his home screen
 
-One huge hold-to-talk button. No login, no forms, no app store.
+One huge talk button: tap to talk, and his words appear as he speaks; tap again when done. If the phone won't listen, a link under the button switches to the keyboard microphone. No login, no forms, no app store.
 
 | He does | GarageDesk does |
 |---|---|
-| Holds the button and says what he'd tell his wife: *"Corolla ABC123, front pads, hour and a half, 350 all up."* | Nemotron 3 Nano routes it in under a second; Nemotron 3 Super turns it into line items as JSON; code finds the job and uses his figures as the charge: a price per item, a labour amount, or a total ("350 all up" puts the balance after parts on the labour line). Only prices he didn't say come from the shop's parts list, and labour from $120 an hour plus GST. The draft is read back out loud: *"Invoice for Maria's Toyota Corolla: labour 219.10 and brake pads front 130.90. 350.00 dollars including GST. Send it?"* He taps Send. |
+| Taps the button and says what he'd tell his wife, then taps again: *"Corolla ABC123, front pads, hour and a half, 350 all up."* | Nemotron 3 Nano routes it in under a second; Nemotron 3 Super turns it into line items as JSON; code finds the job and uses his figures as the charge: a price per item, a labour amount, or a total ("350 all up" puts the balance after parts on the labour line). Only prices he didn't say come from the shop's parts list, and labour from $120 an hour plus GST. The draft is read back out loud: *"Invoice for Maria's Toyota Corolla: labour 219.10 and brake pads front 130.90. 350.00 dollars including GST. Send it?"* He taps Send. |
 | Taps "Add parts from a receipt photo" on the draft and photographs the supplier's receipt | A vision model on Token Factory (MiniCPM-V 4.5) reads it, adds each part to the job at cost, books the receipt as a parts expense with its GST, and reads back the new total |
 | Says *"The CX-5 is waiting on parts till Thursday"* | Texts that customer, so fewer people walk in to ask |
 | Taps Paid EFTPOS, or says *"Corolla paid on EFTPOS"* | Marks the invoice paid with the method and texts the receipt |
@@ -58,7 +58,7 @@ Bookings made on the shop's website flow onto the board, and a job opens prefill
 
 | Feature | Status |
 |---|---|
-| Owner iPhone app, hold-to-talk, read-back | Built |
+| Owner iPhone app, tap-to-talk, read-back | Built |
 | Talk-to-Invoice | Built |
 | Supplier receipt photo adds parts and books the expense | Built |
 | Wife approves or fixes from a text link | Built |

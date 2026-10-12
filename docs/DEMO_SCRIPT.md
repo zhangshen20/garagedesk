@@ -6,7 +6,7 @@ Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 
 ## Setup
 
-- **Owner:** a real iPhone with https://66-201-4-40.sslip.io/owner added to the home screen (Safari, Share, Add to Home Screen). Record it with the iPhone's screen recording, plus a hand-held shot of someone in the workshop holding the button.
+- **Owner:** a real iPhone with https://66-201-4-40.sslip.io/owner open in Safari. Record in Safari rather than from a Home Screen icon, because iOS can block speech recognition for Home Screen web apps; check that Siri & Dictation is on and allow the microphone when asked. If the talk button still won't listen, tap "Talk button not working? Use the keyboard microphone" under it and use the keyboard's dictation key instead. Record it with the iPhone's screen recording, plus a hand-held shot of someone in the workshop tapping the button.
 - **Wife:** a second phone. The approve link arrives on the Outbox page of the dashboard (or by SMS once Twilio is on); open it on this phone.
 - **Customer:** the customer's texts are also on the Outbox page. A phone-sized browser window on that page works as "the customer's phone".
 - **Dashboard:** https://66-201-4-40.sslip.io/ on a laptop for the closing shots.
@@ -20,7 +20,7 @@ Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 "This is a real workshop in Sunshine North, Melbourne. The owner is a great mechanic who doesn't use computers and doesn't type. When a car is done, he works out the price on a calculator and rings his wife, and tells her what he did and how much to charge. She makes the tax invoice. But she works part-time somewhere else now, and if she can't pick up, the customer waits. GarageDesk replaces that phone call."
 
 ## 0:20–1:15  He says what he'd have told her
-*Owner app on the iPhone. Hold the big round button and say, the way he'd say it to his wife: "Corolla ABC123, front pads, hour and a half, 350 all up."*
+*Owner app on the iPhone. Tap the big round button (it turns red: "Listening… tap when done"), and say, the way he'd say it to his wife: "Corolla ABC123, front pads, hour and a half, 350 all up." His words appear as he speaks. Tap again when done.*
 
 "Same words, same numbers, but he says them to his phone. Nemotron 3 Nano works out what he's asking for in under a second, and Nemotron 3 Super turns it into invoice lines. His figures are the charge: three hundred and fifty, all up, is what the customer pays. The pads are priced from the shop's own list and the rest goes on labour, never a number the AI made up. And Maria and her Corolla were already on the board from her online booking, so he didn't have to say who it was for."
 
@@ -44,7 +44,7 @@ Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 "Maria knows her car is ready before she walks in, and she gets a proper Australian tax invoice. She pays on the EFTPOS terminal, he taps Paid, and the receipt goes out. The shop has no accounting software, and now it doesn't need any."
 
 ## 2:15–2:35  The rest of his day
-*Hold the button: "The CX-5 will be ready tomorrow afternoon." Show that customer's text. Then a fast montage, 3 seconds each: a customer booking a service in the web chat; "need front pads for the Mazda" turning into a parts order with a Tavily-found price waiting on Approvals; the Nemotron 3 Ultra end-of-day report.*
+*Tap the button: "The CX-5 will be ready tomorrow afternoon." Show that customer's text. Then a fast montage, 3 seconds each: a customer booking a service in the web chat; "need front pads for the Mazda" turning into a parts order with a Tavily-found price waiting on Approvals; the Nemotron 3 Ultra end-of-day report.*
 
 "Status updates text the customer, so nobody needs to come in and ask. And behind that one button is a whole back office: a front desk that answers customers and books cars, parts prices searched live with Tavily, and an end-of-day report written by Nemotron 3 Ultra."
 
@@ -58,7 +58,7 @@ Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 | # | Shot | Where |
 |---|---|---|
 | 1 | Owner with a calculator, then "Calling: Wife" on his phone | Workshop footage |
-| 2 | Hold-to-talk with his own figures, read-back audible, tap Send | Owner app on the iPhone |
+| 2 | Tap to talk with his own figures, words appearing, read-back audible, tap Send | Owner app on the iPhone |
 | 3 | Photo of a supplier receipt, parts land on the job | Owner app on the iPhone |
 | 4 | Text arrives, approve page with GST, tap "Approve and send" | Second phone |
 | 5 | "Your car is ready" text and the invoice PDF | Outbox, phone-sized window |

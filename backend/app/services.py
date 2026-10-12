@@ -258,8 +258,14 @@ def booking_view(s: Session, b: Booking) -> dict[str, Any]:
 def job_totals(s: Session, job: Job) -> tuple[int, int, int]:
     lines = s.exec(select(JobLine).where(JobLine.job_id == job.id)).all()
     subtotal = int(round(sum(l.qty * l.unit_cents for l in lines)))
-    gst = int(round(subtotal * get_settings().gst_rate))
+    gst = gst_on(subtotal)
     return subtotal, gst, subtotal + gst
+
+
+def gst_on(subtotal_cents: int) -> int:
+    """GST rounded half up, as on a tax invoice (Python's round() goes to even, which
+    made "380 all up" come out at $379.99)."""
+    return int(subtotal_cents * get_settings().gst_rate + 0.5)
 
 
 def job_view(s: Session, job: Job) -> dict[str, Any]:

@@ -18,7 +18,7 @@ _offer: dict[str, Any] | None = None
 # ABC123" is never mistaken for a yes to something else.
 YES_CORE = {"yes", "yeah", "yea", "yep", "yup", "ya", "sure", "ok", "okay", "righto", "sweet", "correct", "send", "go", "paid", "perfect", "beauty", "lovely"}
 NO_CORE = {"no", "nah", "nope", "cancel", "wait", "hold", "hang", "don't", "stop", "later", "not"}
-FILLER = {"please", "mate", "thanks", "thank", "you", "cheers", "it", "that", "that's", "right", "ahead", "do", "to", "on", "eftpos", "they've", "they", "have", "all", "good", "easy", "too", "yet", "on", "leave", "off", "just", "the", "invoice", "her", "him"}
+FILLER = {"please", "mate", "thanks", "thank", "you", "cheers", "it", "that", "that's", "right", "ahead", "do", "to", "on", "eftpos", "they've", "they", "have", "all", "good", "easy", "too", "yet", "on", "leave", "off", "just", "the", "invoice", "her", "him", "one", "this"}
 
 
 def put(action: str, say: str, job_id: int | None = None, ttl_s: int = 15 * 60) -> dict[str, Any]:

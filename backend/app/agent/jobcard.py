@@ -38,7 +38,7 @@ Reply with JSON only:
  "paid_method": "eftpos" | "cash" | "transfer" | "" ,
  "notes": "anything else worth keeping, e.g. 'rear pads 30%, tell customer next time'"}
 He works the money out on a calculator and says it: per item ("pads 120"), for labour ("labour 180"), or for the whole job ("350 all up", "charge her 350"). Put each figure exactly where he said it: item prices in parts[].price_dollars, a labour amount in labour_dollars, a whole-job amount in total_dollars.
-Rules: only include prices he actually states; never guess a price. Prices said by the mechanic are what the customer pays including GST unless he says "plus GST". Work items without a part (machining, inspection, top-ups) belong in labour_description, not parts. qty counts items as a parts shop sells them: "both wiper blades" is one pair, "oil and filter" is one oil and one filter."""
+Rules: only include prices he actually states; never guess a price. Prices said by the mechanic are what the customer pays including GST unless he says "plus GST". Work items without a part (machining, inspection, top-ups) belong in labour_description, not parts. A part he names is a parts item even when it is also the job: "front pads" is labour "Replace front pads" plus the part "Brake pads front"; "did the battery" is labour plus the part "Battery". qty counts items as a parts shop sells them: "both wiper blades" is one pair, "oil and filter" is one oil and one filter."""
 
 RECEIPT_VISION_PROMPT = "Transcribe this supplier receipt or parts invoice exactly, line by line: supplier name, each item with quantity and price, GST and the total. Plain text only."
 
@@ -84,10 +84,13 @@ def transcribe_photo(image_b64: str, mime: str = "image/jpeg") -> tuple[str, str
     return (r.content or "").strip(), r.model
 
 
-def extract(text: str) -> tuple[dict[str, Any], str]:
+def extract(text: str, context: str = "") -> tuple[dict[str, Any], str]:
+    """context: what the agent remembers (memory.owner_context), so "same again for
+    the Corolla" or "make it 380" can be filled in from earlier turns and records."""
     llm = get_llm()
+    system = EXTRACT_PROMPT + (f"\n\nContext:\n{context}" if context else "")
     r = llm.chat(
-        [{"role": "system", "content": EXTRACT_PROMPT}, {"role": "user", "content": text}],
+        [{"role": "system", "content": system}, {"role": "user", "content": text}],
         tier="main",
         json_mode=True,
         max_tokens=2000,
@@ -301,7 +304,7 @@ def _subtotal_for(total_cents: int) -> int:
     rate = get_settings().gst_rate
     base = int(round(total_cents / (1 + rate)))
     for sub in (base, base - 1, base + 1):
-        if sub + int(round(sub * rate)) == total_cents:
+        if sub + svc.gst_on(sub) == total_cents:
             return sub
     return base
 
@@ -385,8 +388,8 @@ def add_receipt(s: Session, job: Job, image_b64: str, mime: str = "image/jpeg") 
     return Draft(ok=True, job=view, readback=f"Added {names} from the receipt. New total {view['total_cents'] / 100:,.2f} dollars including GST. Send it?", transcript=text, model=model)
 
 
-def draft_from_text(s: Session, text: str, transcript_model: str = "") -> Draft:
-    ex, model = extract(text)
+def draft_from_text(s: Session, text: str, transcript_model: str = "", context: str = "") -> Draft:
+    ex, model = extract(text, context)
     return draft_from_extracted(s, ex, text, " + ".join(m for m in (transcript_model, model) if m))
 
 

@@ -24,6 +24,7 @@ from sqlmodel import Session, select
 from .. import services as svc
 from ..llm import get_llm
 from ..models import Booking, Channel, Job, Message
+from . import memory
 from .backoffice import OWNER_CONVERSATION_ID, handle_owner_message
 from .frontdesk import get_or_create_conversation
 from .jobcard import draft_from_text
@@ -45,7 +46,7 @@ status: "to_invoice" for not invoiced yet or ready to bill, "unpaid" for owing m
 If his words only make sense as an answer to your last message (e.g. "the Nissan one", "yes, that one", "the first one"), use that message to fill intent, when and car."""
 
 _WORK = re.compile(
-    r"\b(\d+(?:\.\d+)?\s*(?:hours?|hrs?|bucks|dollars)|hour and a half|half an hour|an hour|all up|labour\s+\$?\d+|\$\s*\d+|fitted|replaced|changed the)\b",
+    r"\b((?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight)\s*(?:hours?|hrs?|bucks|dollars)|hour and a half|half an hour|an hour|all up|labour\s+\$?\d+|\$\s*\d+|fitted|replaced|changed the)\b",
     re.I,
 )
 
@@ -60,6 +61,9 @@ _WANTS_INVOICE = re.compile(
     re.I,
 )
 
+
+_QUESTION = re.compile(r"^\s*(?:and\s+|so\s+)?(what|what's|whats|when|where|who|which|how|why|did|does|has|have|is|are|was|were)\b(?!\s+(?:the|a|an)\s+\w+\s+(?:on|for)\b)", re.I)
+_WAITING = re.compile(r"\bwaiting (?:on|for)\b", re.I)
 
 _DAY_WORDS = re.compile(r"\b(yesterday|yday|today|morning|arvo|afternoon|tonight|tomorrow|week|month|days?|ago|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|tues|wed|thu|thurs|fri|sat|sun|\d{1,2}(?:st|nd|rd|th)?|\d{1,2}/\d{1,2}|january|february|march|april|may|june|july|august|september|october|november|december|recently|lately)\b", re.I)
 
@@ -104,6 +108,13 @@ def route(text: str, context: list[dict[str, str]] | None = None) -> dict[str, A
     # it's about a job we already have
     if intent == "job_card" and not (_WORK.search(text) or _JOB_WORDS.search(text)):
         intent = "invoice"
+    # a question ("what did we charge her", "what did that come to") never writes up an
+    # invoice, and a car waiting on parts is a status, not work to bill
+    if intent in ("job_card", "invoice") and not _WORK.search(text):
+        if _QUESTION.match(text):
+            intent = "find"
+        elif _WAITING.search(text):
+            intent = "other"
     when = str(out.get("when") or "").strip()
     # a small model sometimes fills in a day he never said
     if when and not _said(when, text, context):
@@ -161,6 +172,11 @@ def _reply(text: str, readback: str, model: str, **extra: Any) -> dict[str, Any]
     return {"kind": "reply", "readback": readback, "steps": extra.pop("steps", []), "model": model, **extra}
 
 
+# Questions the job search can't answer from a list (bookings, what was charged, a
+# car's history, "what did that come to"): the agent answers these with its memory.
+_ASK_AGENT = re.compile(r"\b(booked|booking|charged?|come to|came to|cost|how much|last time|last in|usually|remember|notes?)\b", re.I)
+
+
 def _booked_today(s: Session, hint: str) -> str:
     """A car booked in today that has no job yet, e.g. "Liam's Ford Ranger"."""
     if not hint:
@@ -192,6 +208,10 @@ def invoice_for(s: Session, text: str, r: dict[str, Any]) -> dict[str, Any]:
     if len(jobs) > 1:
         return _reply(text, f"{len(jobs)} jobs to invoice: " + "; ".join(describe(j) for j in jobs) + ". Which one?", r["model"], jobs=jobs)
     # nothing left to invoice: say why (already invoiced?) or what's close
+    # booked in today with nothing written up yet beats last year's paid visits
+    booked = "" if r["when"] else _booked_today(s, " ".join(x for x in (r["car"], r["customer"]) if x))
+    if booked:
+        return _reply(text, f"{booked} is booked in today but there's nothing on it yet. Tell me what you did and what to charge.", r["model"], jobs=[])
     anyway = search_jobs(s, when=r["when"], car=r["car"], customer=r["customer"])
     if anyway["jobs"]:
         return _reply(text, f"Nothing left to invoice for {anyway['searched']}. " + "; ".join(describe(j) for j in anyway["jobs"]) + ".", r["model"], jobs=anyway["jobs"])
@@ -219,14 +239,21 @@ def handle_voice(s: Session, text: str) -> dict[str, Any]:
     # "yes" / "nah" answers the step the app just offered (send it, mark it paid)
     short = reply_to_offer(s, text)
     if short is not None:
+        memory.remember_turn(s, text, short)
         return short
-    return with_voice(_handle(s, text))
+    out = _handle(s, text)
+    memory.remember_turn(s, text, out)  # what he said and which job it was about
+    return with_voice(out)
 
 
 def _handle(s: Session, text: str) -> dict[str, Any]:
-    r = route(text, recent_context(s))
+    # "make it 380 all up" straight after a draft: his earlier words plus the change
+    amended = memory.amend_text(s, text)
+    r = {"intent": "job_card", "model": ""} if amended else route(text, recent_context(s))
     if r["intent"] == "job_card":
-        out = {"kind": "draft", **draft_from_text(s, text).as_dict()}
+        words = amended or text
+        ctx = memory.owner_context(s, words, for_extract=True)
+        out = {"kind": "draft", **draft_from_text(s, words, context=ctx).as_dict(), "transcript": text, "described": words}
         out["model"] = " + ".join(m for m in (r["model"], out.get("model")) if m)
         remember(s, text, out["readback"], out["model"])
         return out
@@ -234,11 +261,11 @@ def _handle(s: Session, text: str) -> dict[str, Any]:
         out = invoice_for(s, text, r)
         remember(s, text, out["readback"], r["model"])
         return out
-    if r["intent"] == "find":
+    if r["intent"] == "find" and not _ASK_AGENT.search(text):
         out = find_for(s, text, r)
         remember(s, text, out["readback"], r["model"])
         return out
-    res = handle_owner_message(s, text, owner_app=True)
+    res = handle_owner_message(s, text, owner_app=True, context=memory.owner_context(s, text))
     model = " + ".join(m for m in (r["model"], res.model) if m)
     # the agent got an invoice ready: show it with the Send button
     for st in reversed(res.steps):

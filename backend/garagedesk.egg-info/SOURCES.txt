@@ -12,6 +12,9 @@ app/agent/__init__.py
 app/agent/backoffice.py
 app/agent/frontdesk.py
 app/agent/jobcard.py
+app/agent/knowhow.py
+app/agent/memory.py
+app/agent/memory_tools.py
 app/agent/owner_app.py
 app/agent/parts_lookup.py
 app/agent/report.py

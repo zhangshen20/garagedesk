@@ -11,14 +11,16 @@ from sqlmodel import Session
 from .. import services as svc
 from ..config import get_settings
 from ..models import Channel
+from . import knowhow
 from .frontdesk import get_or_create_conversation
+from .memory_tools import MEMORY_TOOLS
 from .runner import AgentResult, run_agent
 from .tools import BACKOFFICE_TOOLS, OWNER_APP_TOOLS
 
 OWNER_CONVERSATION_ID = "owner"
 
 
-def system_prompt(owner_app: bool = False) -> str:
+def system_prompt(owner_app: bool = False, context: str = "") -> str:
     s = get_settings()
     t = svc.today()
     voice = ""
@@ -39,12 +41,16 @@ Rules:
 - Before ordering parts, call lookup_part_price and pick the cheapest sensible supplier, then order_parts. Orders always wait for the owner's approval; tell them it is in their Approvals list.
 - {"When he says a car is done or waiting on parts: update_car_status. When a customer pays: mark_paid." if owner_app else "When a job is done: set_job_status done, then issue_invoice (this also texts the customer). When a customer pays: record_payment."}
 - Never add facts the owner didn't give (dates, reasons, prices) to anything sent to a customer.
+- Never put a price on a customer's job yourself: no add_job_line with a looked-up or guessed amount. If a line has no price, ask him what to charge.
 - Keep answers short and concrete: what you did, ids/numbers, and anything that now needs the owner. Use markdown lists sparingly.
 - If a request is ambiguous (which job? which customer?), list the candidates from find_jobs/list_bookings and ask one question.
-"""
+- For a customer's history ("same as last time", "what did we charge Maria", "when was the Ranger last in") use recall_customer; when he says "remember ...", use remember.
+
+{knowhow.GROUNDING}
+""" + (f"\nWhat you remember:\n{context}\n" if context else "")
 
 
-def handle_owner_message(s: Session, text: str, owner_app: bool = False) -> AgentResult:
+def handle_owner_message(s: Session, text: str, owner_app: bool = False, context: str = "") -> AgentResult:
     """owner_app: he spoke into the phone app. Replies are read aloud, invoices go
     through prepare_invoice (his Send button, then the office approves) and the
     turn ends as soon as an invoice is ready."""
@@ -53,9 +59,9 @@ def handle_owner_message(s: Session, text: str, owner_app: bool = False) -> Agen
     return run_agent(
         s,
         conv=conv,
-        system_prompt=system_prompt(owner_app),
+        system_prompt=system_prompt(owner_app, context),
         user_text=text,
-        tool_names=OWNER_APP_TOOLS if owner_app else BACKOFFICE_TOOLS,
+        tool_names=(OWNER_APP_TOOLS if owner_app else BACKOFFICE_TOOLS) + MEMORY_TOOLS,
         tier="main",
         stop_after={"prepare_invoice"} if owner_app else None,
     )

@@ -10,7 +10,7 @@ Built for the Nebius x NVIDIA Global AI Hackathon (track: Best Apps & Agents) wi
 
 ## The owner this is for
 
-The owner is a good mechanic. He is not comfortable with computers and doesn't type. His day is spent under cars, directing his staff, answering customers who walk in to ask "is it ready?", and ringing suppliers for parts. There are no job cards and no software: when a car is done he works out the charge on a calculator. Customers pay on EFTPOS.
+The owner is a good mechanic. He is not comfortable with computers, doesn't type, and English is not his first language. His day is spent under cars, directing his staff, answering customers who walk in to ask "is it ready?", and ringing suppliers for parts. There are no job cards and no software: when a car is done he works out the charge on a calculator. Customers pay on EFTPOS.
 
 His wife used to do the admin, including the GST tax invoices. She now works part-time somewhere else, so when a car is finished he phones her and tells her what work was done, the parts, and how much to charge, and she makes the tax invoice. If she can't answer, the customer waits.
 
@@ -36,7 +36,8 @@ One huge talk button: hold it and talk, let go to send (a tap to start and a tap
 |---|---|
 | Holds the button and says what he'd tell his wife, then lets go: *"Corolla ABC123, front pads, hour and a half, 350 all up."* | Nemotron 3 Nano routes it in under a second; Nemotron 3 Super turns it into line items as JSON; code finds the job and uses his figures as the charge: a price per item, a labour amount, or a total ("350 all up" puts the balance after parts on the labour line). Only prices he didn't say come from the shop's parts list, and labour from $120 an hour plus GST. The draft is read back out loud: *"Maria's Corolla. Front brake pads and an hour and a half labour. Three hundred and fifty dollars all up. Send it to Jenny?"* He says "yep" and it goes to his wife. "Hear every line" reads each line and the GST. |
 | Says *"Liam's Ranger, did the battery again, same as last time"* | Looks up the Ranger's last visit and drafts the same battery and labour at last visit's figures: $366.00 all up |
-| Corrects or adds: *"actually make it 380 all up"*, *"add oil and a filter to that"* | Changes only what he changed, on the job he was just talking about |
+| Corrects or adds: *"actually make it 380 all up"*, *"45 for the pads"*, *"add oil and a filter to that"* | Changes only what he changed, on the job he was just talking about |
+| Says the work but not the car: *"front pads, hour and a half, 350 all up"* | Asks which car instead of guessing. His answer ("the Corolla", a name, a rego, "the first one", "yesterday's") carries on the same request, over as many questions as it takes, and an unpriced part gets "What do you charge for it?", where "25" is enough |
 | Asks *"when was Maria's Corolla last in?"*, *"what's he driving?"*, or says *"remember Jack always pays cash"* | Answers from the shop's records and remembers facts he gives it |
 | Says *"Find yesterday's jobs and prepare invoice"* | Nemotron Nano pulls out the day, rego, customer, car or status; code finds the job (Dan's X-Trail, finished yesterday) and the invoice draft is read back: $240.90 all up |
 | Taps "Add parts from a receipt photo" on the draft and photographs the supplier's receipt | A vision model on Token Factory (MiniCPM-V 4.5) reads it, adds each part to the job at cost, books the receipt as a parts expense with its GST, and reads back the new total |
@@ -63,8 +64,10 @@ Bookings made on the shop's website flow onto the board, and a job opens prefill
 | Feature | Status |
 |---|---|
 | Owner phone app, hold to talk in any browser, spoken read-back | Built |
+| Speech recognition that copes with accented English (NVIDIA Parakeet) | Built |
 | Find jobs by day, rego, customer, car or status | Built |
 | Remembers the conversation, each customer and car, past visits and his notes; mechanic know-how | Built |
+| Follow-up questions (which car, which one, what price) answered in a word | Built |
 | Talk-to-Invoice | Built |
 | Supplier receipt photo adds parts and books the expense | Built |
 | Wife approves or fixes from a text link | Built |
@@ -143,6 +146,7 @@ scheduler ─4pm / 5:45pm─────────────────▶ 
 
 - **Nebius Token Factory** serves every model call through its OpenAI-compatible API with function calling. The design leans on having several Nemotron price/capability tiers behind one key: cheap Nano calls on every message, Super for the agents and invoice building, Ultra once a day, and a vision model for photos.
 - **NVIDIA Nemotron 3** (Nano, Super, Ultra) do all the language reasoning.
+- **NVIDIA Parakeet** (TDT 0.6B v2, int8 ONNX) turns the owner's recordings into text on the VM's CPU, because Token Factory has no speech model.
 - **Nebius AI Cloud** hosts the demo: one `cpu-d3` VM in eu-west1 runs the Docker image (API, built frontend, SQLite volume) behind Caddy with a Let's Encrypt certificate for the sslip.io name; see `deploy/nebius/`.
 - **Tavily** searches live supplier prices for parts the shop doesn't stock; Nemotron Nano turns the results into structured prices.
 

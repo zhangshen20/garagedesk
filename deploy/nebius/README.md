@@ -24,7 +24,9 @@ The VM's cloud-init also authorizes `~/.ssh/id_ed25519.pub` (override with `SSH_
 
 ## Updates
 
-Add repository secrets `DEPLOY_HOST`, `DEPLOY_USER` (`ubuntu`), `DEPLOY_SSH_KEY` and every green CI run on `main` redeploys automatically (`.github/workflows/deploy.yml`). Or SSH in and run `redeploy.sh`.
+The first `redeploy.sh` run installs `garagedesk-update.timer`: every 5 minutes the VM fetches `main` and, when it has moved on, runs `redeploy.sh` itself (`self-update.sh`). So anything merged to `main` is live within a few minutes. `journalctl -u garagedesk-update` shows what it did; `systemctl disable --now garagedesk-update.timer` turns it off.
+
+Alternatively, add repository secrets `DEPLOY_HOST`, `DEPLOY_USER` (`ubuntu`), `DEPLOY_SSH_KEY` and every green CI run on `main` redeploys automatically (`.github/workflows/deploy.yml`). Or SSH in and run `redeploy.sh`.
 
 ## HTTPS
 

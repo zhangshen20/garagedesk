@@ -31,6 +31,13 @@ def lookup_part_price(s: Session, query: str, vehicle: str = "") -> dict[str, An
     offers = [o for o in offers if o.get("price_cents")]
     offers.sort(key=lambda o: o["price_cents"])
     best = offers[0] if offers else None
+    if not best:
+        # no price anywhere (no web search on this server, nothing on the shelf for this
+        # car): he's ordering, not quoting, so the shop's usual supplier for that kind of
+        # part takes the order and prices it on their invoice
+        sup = _usual_supplier(s, query)
+        return {"query": query, "offers": [], "best_supplier": sup, "best_price_cents": None, "best_part_id": None, "searched_web": bool(web),
+                "note": f"No price found. Order it from {sup} with no unit_cost_cents; they price it on their invoice."}
     return {
         "query": query,
         "offers": offers[:6],
@@ -60,6 +67,19 @@ def _local_matches(s: Session, query: str, vehicle: str = "") -> list[Part]:
         if sum(w in name for w in words) >= need:
             out.append(p)
     return out
+
+
+def _usual_supplier(s: Session, query: str) -> str:
+    """The supplier the shop already buys this kind of part from (any car), else its first."""
+    words = {w for w in re.findall(r"[a-z]+", query.lower()) if len(w) > 2}
+    best, score = None, 0
+    for p in s.exec(select(Part)).all():
+        kind = set(re.findall(r"[a-z]+", p.name.split(" - ", 1)[0].lower()))
+        n = len(words & kind)
+        if n > score and p.supplier_id:
+            best, score = p.supplier_id, n
+    sup = s.get(Supplier, best) if best else s.exec(select(Supplier)).first()
+    return sup.name if sup else "the parts supplier"
 
 
 def _web_search(q: str) -> list[dict[str, Any]]:

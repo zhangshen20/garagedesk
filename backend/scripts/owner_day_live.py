@@ -302,6 +302,13 @@ FLOWS: dict[str, list[Step]] = {
         ("say", "yes", [kind("done"), says("order sent")]),
         ("check", None, [lambda r, s: None if s.exec(select(PurchaseOrder).where(PurchaseOrder.status == POStatus.sent)).first() else "order not sent to the supplier"]),
     ],
+    # the VM may have no web search: an order with no price found still goes ahead
+    "parts-order-no-web": [
+        ("cold", None, []),
+        ("do", lambda c, s: setattr(get_settings(), "tavily_api_key", ""), []),
+        ("say", "order front pads for the Kia Cerato", [offer("order"), says("send the order"), never("couldn't find", "would you like")]),
+        ("say", "yes", [kind("done"), says("order sent")]),
+    ],
     "booking": [
         ("cold", None, []),
         ("do", lambda c, s: setattr(sys.modules[__name__], "_before", _jobs(s)), []),

@@ -514,7 +514,8 @@ def _order_offer(s: Session, text: str, placed: dict[str, Any], model: str, step
 
     items = " and ".join(f"{l['qty']:g} x {short(l['description'])}" if l["qty"] != 1 else short(l["description"]) for l in view["lines"]) or "the parts"
     items = items[:1].upper() + items[1:]
-    say = f"{items} from {view['supplier']}, ${view['total_cents'] / 100:,.2f} plus GST. Send the order?"
+    price = f"${view['total_cents'] / 100:,.2f} plus GST" if view["total_cents"] else "they'll price it on their invoice"
+    say = f"{items} from {view['supplier']}, {price}. Send the order?"
     out = _reply(text, say, model, steps=steps)
     out["offer"] = offers.put("order", say, approval_id=placed["approval_id"])
     return out

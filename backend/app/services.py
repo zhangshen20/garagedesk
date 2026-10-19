@@ -436,7 +436,7 @@ def create_purchase_order(s: Session, *, supplier: Supplier, items: list[dict[st
     s.add(po)
     s.flush()
     for it in items:
-        s.add(POLine(po_id=po.id, part_id=it.get("part_id"), description=it["description"], qty=int(it.get("qty", 1)), unit_cost_cents=int(it.get("unit_cost_cents", 0))))
+        s.add(POLine(po_id=po.id, part_id=it.get("part_id"), description=it["description"], qty=int(it.get("qty", 1)), unit_cost_cents=int(it.get("unit_cost_cents") or 0)))
     if job and job.status in (JobStatus.approved, JobStatus.in_progress):
         job.status = JobStatus.waiting_parts
     s.flush()

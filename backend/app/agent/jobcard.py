@@ -39,7 +39,7 @@ Reply with JSON only:
  "paid_method": "eftpos" | "cash" | "transfer" | "" ,
  "notes": "anything else worth keeping, e.g. 'rear pads 30%, tell customer next time'"}
 He works the money out on a calculator and says it: per item ("pads 120"), for labour ("labour 180"), or for the whole job ("350 all up", "charge her 350"). Put each figure exactly where he said it: item prices in parts[].price_dollars, a labour amount in labour_dollars, a whole-job amount in total_dollars.
-Rules: only include prices he actually states; never guess a price. Prices said by the mechanic are what the customer pays including GST unless he says "plus GST". Work items without a part (machining, inspection, top-ups) belong in labour_description, not parts. A part he names is a parts item even when it is also the job: "front pads" is labour "Replace front pads" plus the part "Brake pads front"; "did the battery" is labour plus the part "Battery". qty counts items as a parts shop sells them: "both wiper blades" is one pair, "oil and filter" is one oil and one filter."""
+Rules: only include prices he actually states; never guess a price. Name parts only with what he said or what is written in the context: never add a size, battery group, brand or part number he didn't give ("new battery" is "Battery"). Prices said by the mechanic are what the customer pays including GST unless he says "plus GST". Work items without a part (machining, inspection, top-ups) belong in labour_description, not parts. A part he names is a parts item even when it is also the job: "front pads" is labour "Replace front pads" plus the part "Brake pads front"; "did the battery" is labour plus the part "Battery". qty counts items as a parts shop sells them: "both wiper blades" is one pair, "oil and filter" is one oil and one filter."""
 
 RECEIPT_VISION_PROMPT = "Transcribe this supplier receipt or parts invoice exactly, line by line: supplier name, each item with quantity and price, GST and the total. Plain text only."
 
@@ -183,11 +183,14 @@ def _vehicle_words(car: str, name: str, rego: str) -> str:
     return " ".join(words)
 
 
-def find_or_open_job(s: Session, ex: dict[str, Any]) -> Job | None:
+def find_or_open_job(s: Session, ex: dict[str, Any], *, open_new: bool = True) -> Job | None:
+    """open_new: no job yet for this car, so open one (from today's booking, or a
+    walk-in). Off when he gave no work: there's nothing to write up, so a new empty
+    job would only be clutter."""
     hint = " ".join(str(ex.get(k) or "") for k in ("car", "customer_name"))
     rego = str(ex.get("rego") or "")
     job = match_open_job(s, hint, rego)
-    if job:
+    if job or not open_new:
         return job
     job = _job_from_todays_booking(s, hint, rego)
     if job:
@@ -235,8 +238,9 @@ def _ex_gst(dollars: float) -> int:
     return int(round(dollars * 100 / (1 + get_settings().gst_rate)))
 
 
-def apply_to_job(s: Session, job: Job, ex: dict[str, Any]) -> list[str]:
-    """Replace the job's lines with what the owner described. Returns warnings to read back."""
+def apply_to_job(s: Session, job: Job, ex: dict[str, Any], *, edit: bool = False) -> list[str]:
+    """Replace the job's lines with what the owner described. Returns warnings to read back.
+    edit: he changed a job that already had lines, so no labour is fine ("take the labour off")."""
     warnings: list[str] = []
     settings = get_settings()
     v = svc.job_view(s, job)
@@ -256,11 +260,12 @@ def apply_to_job(s: Session, job: Job, ex: dict[str, Any]) -> list[str]:
         labour = JobLine(job_id=job.id, kind=LineKind.labour, description=desc + (f" ({hours:g} hrs)" if hours else ""), qty=1, unit_cents=_ex_gst(labour_dollars))
     elif hours:
         labour = JobLine(job_id=job.id, kind=LineKind.labour, description=desc, qty=hours, unit_cents=settings.labour_rate_cents)
-    elif total_dollars is None:
+    elif total_dollars is None and not edit:
         warnings.append("I didn't hear the labour time.")
     if labour:
         s.add(labour)
 
+    supplied: list[str] = []  # parts with no price that his "all up" figure covers
     for p in ex.get("parts") or []:
         name = str(p.get("name") or "").strip()
         if not name:
@@ -273,9 +278,15 @@ def apply_to_job(s: Session, job: Job, ex: dict[str, Any]) -> list[str]:
             s.add(JobLine(job_id=job.id, kind=LineKind.part, description=part.name if part else name, qty=qty, unit_cents=unit, part_id=part.id if part else None))
         elif part:
             s.add(JobLine(job_id=job.id, kind=LineKind.part, description=part.name, qty=qty, unit_cents=part.sell_cents, part_id=part.id))
+        elif total_dollars is not None and labour_dollars is None:
+            # "new battery, 280 all up": his total covers it, so the part rides on the
+            # work line ("Fit battery, battery supplied") instead of asking its price
+            supplied.append(name if qty == 1 else f"{qty:g} x {name}")
         else:
             s.add(JobLine(job_id=job.id, kind=LineKind.part, description=name, qty=qty, unit_cents=0))
             warnings.append(f"I don't have a price for {name}.")
+    if supplied:
+        desc = f"{desc}, {' and '.join(n[:1].lower() + n[1:] for n in supplied)} supplied"
 
     for f in ex.get("fees") or []:
         if f.get("name") and f.get("price_dollars") not in (None, ""):
@@ -389,10 +400,18 @@ def add_receipt(s: Session, job: Job, image_b64: str, mime: str = "image/jpeg") 
     if not parts:
         return Draft(ok=False, readback="I couldn't read any parts on that receipt. Try again with the whole receipt in view.", transcript=text, model=model)
     markup = 1 + get_settings().parts_markup_percent / 100
+    # parts he named without a price ("replaced the wipers") get their price from the receipt
+    unpriced = [l for l in s.exec(select(JobLine).where(JobLine.job_id == job.id, JobLine.kind == LineKind.part, JobLine.unit_cents == 0)).all()]
     for p in parts:
         qty = _num(p.get("qty")) or 1
         line_inc = float(p["line_total_dollars"])
-        s.add(JobLine(job_id=job.id, kind=LineKind.part, description=str(p["name"]), qty=qty, unit_cents=_ex_gst(line_inc * markup / qty)))
+        unit = _ex_gst(line_inc * markup / qty)
+        same = next((l for l in unpriced if len(_words(l.description) & _words(str(p["name"]))) >= min(2, len(_words(l.description)))), None)
+        if same:
+            unpriced.remove(same)
+            same.description, same.qty, same.unit_cents = str(p["name"]), qty, unit
+            continue
+        s.add(JobLine(job_id=job.id, kind=LineKind.part, description=str(p["name"]), qty=qty, unit_cents=unit))
     total = _num(rc.get("total_dollars")) or sum(float(p["line_total_dollars"]) for p in parts)
     gst = _num(rc.get("gst_dollars"))
     from ..models import Expense
@@ -405,6 +424,46 @@ def add_receipt(s: Session, job: Job, image_b64: str, mime: str = "image/jpeg") 
     view = svc.job_view(s, job)
     names = ", ".join(str(p["name"]).lower() for p in parts[:3])
     return Draft(ok=True, job=view, readback=f"Added {names} from the receipt. New total {view['total_cents'] / 100:,.2f} dollars including GST. Send it?", transcript=text, model=model)
+
+
+EDIT_RULES = """
+He is changing a job that is already written up. You get its lines as they stand (prices include GST) and what he wants changed. Return the whole job card after his change: keep every line he didn't mention with exactly its price, take off what he takes off, change what he changes, add what he adds (with a price only if he says one). Labour charged at an hourly rate goes back as labour_hours with labour_dollars null; a fixed labour amount goes back as labour_dollars. If he removes the labour, labour_hours and labour_dollars are both null. total_dollars only if he says a new total for the whole job."""
+
+
+def _as_lines(view: dict[str, Any]) -> str:
+    gst = 1 + get_settings().gst_rate
+    rate = get_settings().labour_rate_cents
+    out = []
+    for l in view["lines"]:
+        inc = l["qty"] * l["unit_cents"] * gst / 100
+        if l["kind"] == "labour" and l["unit_cents"] == rate:
+            out.append(f"- labour: {l['description']}, {l['qty']:g} hours at the shop rate")
+        elif l["kind"] == "labour":
+            out.append(f"- labour: {l['description']}, ${inc:,.2f}")
+        else:
+            out.append(f"- {l['kind']}: {l['description']} x{l['qty']:g}, ${inc:,.2f}" if l["unit_cents"] else f"- {l['kind']}: {l['description']} x{l['qty']:g}, no price yet")
+    return "\n".join(out) or "- nothing yet"
+
+
+def edit_job(s: Session, job: Job, text: str, context: str = "") -> Draft:
+    """"Take the labour off the Nissan", "add wiper blades to the CX-5, 45": change a
+    job that's already written up, keeping every price he didn't touch."""
+    view = svc.job_view(s, job)
+    if job.status in (JobStatus.invoiced, JobStatus.paid):
+        first = (view["customer"] or "That").split()[0]
+        return Draft(ok=False, job=view, readback=f"{first}'s {' '.join(view['vehicle'].split()[:2])} is already invoiced ({view['invoice_number']}), so I can't change it now.", transcript=text)
+    system = EXTRACT_PROMPT + EDIT_RULES + (f"\n\nContext:\n{context}" if context else "")
+    user = f"The job for {view['customer']}'s {view['vehicle']} now has:\n{_as_lines(view)}\nHis change: {text}"
+    r = get_llm().chat([{"role": "system", "content": system}, {"role": "user", "content": user}], tier="main", json_mode=True, max_tokens=2000, temperature=0, think=False)
+    ex = _parse_json(r.content or "")
+    if not ex:
+        return Draft(ok=False, job=view, readback="Sorry, I didn't get the change. Say it again.", transcript=text, model=r.model)
+    ex["rego"] = view["rego"]
+    warnings = apply_to_job(s, job, ex, edit=True)
+    view = svc.job_view(s, job)
+    if not view["lines"]:
+        warnings.append("There's nothing left on it.")
+    return Draft(ok=True, job=view, readback=readback(view, warnings), warnings=warnings, transcript=text, extracted=ex, model=r.model)
 
 
 def draft_from_text(s: Session, text: str, transcript_model: str = "", context: str = "") -> Draft:
@@ -435,7 +494,7 @@ def draft_from_extracted(s: Session, ex: dict[str, Any], transcript: str = "", m
     Other readers (the hardened photo reader, booking prefill) enter here."""
     if not ex:
         return Draft(ok=False, readback="Sorry, I didn't get that. Try again: say the car, what you did, and how long it took.", transcript=transcript, model=model)
-    job = find_or_open_job(s, ex)
+    job = find_or_open_job(s, ex, open_new=_has_work(ex))
     if not job:
         return Draft(ok=False, readback=_not_found(s, ex), transcript=transcript, extracted=ex, model=model)
     if not _has_work(ex):

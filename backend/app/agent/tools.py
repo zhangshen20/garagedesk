@@ -365,7 +365,7 @@ def _order_parts(s: Session, supplier_name: str, items: list[dict[str, Any]], jo
     po = svc.create_purchase_order(s, supplier=sup, items=items, job=job, message=message)
     view = svc.po_view(s, po)
     a = svc.request_approval(s, kind="purchase_order", title=f"Send parts order PO-{po.id} to {sup.name}", detail=", ".join(f"{l['qty']} x {l['description']}" for l in view["lines"]) + f" (${view['total_cents'] / 100:.2f} ex GST)", ref_table="purchaseorder", ref_id=po.id, payload=view)
-    return {"po_id": po.id, "supplier": sup.name, "approval_id": a.id, "status": "awaiting_owner_approval", "total_cents": view["total_cents"]}
+    return {"ok": True, "po_id": po.id, "supplier": sup.name, "approval_id": a.id, "status": "awaiting_owner_approval", "total_cents": view["total_cents"]}
 
 
 @tool("add_expense", "Record a shop expense (rent, consumables, fuel...). amount_cents is what was paid inc GST.", {"description": S, "amount_cents": I, "category": S, "day": S}, ["description", "amount_cents"])
@@ -379,11 +379,14 @@ def _add_expense(s: Session, description: str, amount_cents: int, category: str 
     return {"expense_id": e.id, "gst_cents": gst}
 
 
-@tool("money_summary", "Cash in/out and GST collected over a date range.", {"from_day": S, "to_day": S})
-def _money_summary(s: Session, from_day: str = "today", to_day: str = "today") -> dict[str, Any]:
+@tool("money_summary", "Cash in/out and GST collected. Pass period in his words ('today', 'yesterday', 'this week', 'last week', 'this month', 'last month', 'this quarter', 'last quarter'), or from_day and to_day.", {"period": S, "from_day": S, "to_day": S})
+def _money_summary(s: Session, period: str = "", from_day: str = "today", to_day: str = "today") -> dict[str, Any]:
     from ..models import Expense, Payment
 
-    a, b = svc.parse_day(from_day, past=True), svc.parse_day(to_day, past=True)
+    if period:
+        a, b = svc.parse_period(period)
+    else:
+        a, b = svc.parse_day(from_day, past=True), svc.parse_day(to_day, past=True)
     lo, hi = svc.utc_bounds(a, b)
     pays = s.exec(select(Payment).where(Payment.paid_at >= lo, Payment.paid_at <= hi)).all()
     exps = s.exec(select(Expense).where(Expense.day >= a, Expense.day <= b)).all()

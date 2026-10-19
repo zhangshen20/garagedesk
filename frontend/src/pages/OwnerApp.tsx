@@ -759,6 +759,19 @@ export default function OwnerApp() {
                 >
                   <CircleDollarSign size={20} /> Paid EFTPOS
                 </button>
+              ) : today.offer.action === "order" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void api.ownerVoice("yes").then((r) => {
+                      speak(r.say || r.readback);
+                      refresh();
+                    }, refresh);
+                  }}
+                  className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-lg font-semibold text-white"
+                >
+                  <Send size={20} /> Send order
+                </button>
               ) : (
                 <span />
               )}
@@ -769,7 +782,7 @@ export default function OwnerApp() {
                 }}
                 className="h-14 rounded-2xl bg-slate-200 px-5 text-base font-semibold text-slate-700"
               >
-                {today.offer.action === "paid" ? "Not yet" : "OK"}
+                {today.offer.action === "paid" ? "Not yet" : today.offer.action === "order" ? "Not now" : "OK"}
               </button>
             </div>
           </section>

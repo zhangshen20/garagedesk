@@ -84,7 +84,7 @@ def test_approver_sends_it_back(client):
 
 def test_status_update_and_paid_by_voice(client):
     r = client.post("/api/owner/voice", json={"text": "The CX-5 is done"}).json()
-    assert r["kind"] == "reply"
+    assert r["kind"] in ("reply", "draft")  # with work on it, its invoice comes ready to send
     assert any(s["tool"] == "update_car_status" for s in r["steps"])
     assert any("Jack" in o["body"] and "finished" in o["body"] for o in _outbox(client))
     today = client.get("/api/owner/today").json()

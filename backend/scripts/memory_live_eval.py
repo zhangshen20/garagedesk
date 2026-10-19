@@ -143,6 +143,8 @@ def no_new_customer(r: dict[str, Any], s: Session) -> str | None:
     return None if n == 0 else f"{n} customer(s) invented"
 
 
+RESTART = "(the app restarts)"  # drops what's held in memory only, as a redeploy would
+
 # Each conversation: a title and turns of (what he says, checks).
 CONVERSATIONS: list[tuple[str, list[tuple[str, list[Check]]]]] = [
     ("Correct the total, then send", [
@@ -223,6 +225,27 @@ CONVERSATIONS: list[tuple[str, list[tuple[str, list[Check]]]]] = [
         ("25", [draft_for("SR2020"), labour_hours(1.5), has_part("oil"), priced("filter")]),
         ("yep", [sent("SR2020")]),
     ]),
+    ("Which one? 'The first one', then a change", [
+        ("update the invoice", [says("which")]),
+        ("the first one", [draft_for("ABC123")]),
+        ("add wipers 45", [draft_for("ABC123"), labour_hours(1.5), has_part("pad"), has_part("wiper")]),
+    ]),
+    ("Which one? 'Yesterday's', then his price, then yes after the app restarts", [
+        ("update the invoice", [says("which")]),
+        ("yesterday's", [draft_for("DW4521")]),
+        ("45 for the pads", [draft_for("DW4521", 17700)]),
+        (RESTART, []),
+        ("yep", [sent("DW4521")]),
+    ]),
+    ("No car said after talking about another: ask, don't bill the last one", [
+        ("find yesterday's jobs and prepare invoice", [draft_for("DW4521")]),
+        ("front pads, hour and a half, 350 all up", [not_draft]),
+        ("the Corolla", [draft_for("ABC123", 35000), has_part("pad")]),
+    ]),
+    ("Which car? The rego, spelled out", [
+        ("the car is done", []),
+        ("A B C 1 2 3", [job_status("ABC123", JobStatus.done)]),
+    ]),
     ("Send which one? Then the customer", [
         ("send the invoice", []),
         ("Maria's", [draft_for("ABC123")]),
@@ -244,6 +267,12 @@ def run(selected: set[int]) -> int:
                 BASE_CUSTOMERS[0] = len(s0.exec(select(Customer)).all())
             print(f"\n##### {n}. {title}")
             for said, checks in turns:
+                if said == RESTART:
+                    from app.voice import offers
+
+                    offers.clear()
+                    print(f"  {RESTART}")
+                    continue
                 t0 = time.time()
                 r = c.post("/api/owner/voice", json={"text": said}).json()
                 dt = time.time() - t0

@@ -11,7 +11,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, Check, CircleDollarSign, Clock, Loader2, Mic, RotateCcw, Send, Square, Volume2, Wrench } from "lucide-react";
 import { api, type OwnerJob, type OwnerResult, type OwnerToday } from "../api";
 import { money } from "../format";
-import { plain, setServerVoice, speak, stopSpeech, unlockSpeech } from "../voice";
+import { plain, setAudioSession, setServerVoice, speak, stopSpeech, unlockSpeech } from "../voice";
 
 // --- speech in and out -----------------------------------------------------------------
 
@@ -369,7 +369,7 @@ export default function OwnerApp() {
 
   async function startRecording(by: "press" | "tap") {
     stopSpeech();
-    unlockSpeech();
+    unlockSpeech(true);
     recording.current = true;
     startedBy.current = by;
     startedOk.current = false;
@@ -380,12 +380,22 @@ export default function OwnerApp() {
     const asked = Date.now();
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } catch (first) {
+        // iPhone: the audio session can still be busy playing; let it settle once and retry
+        if ((first as Error)?.name !== "InvalidStateError") throw first;
+        diag("rec-retry", { by, message: String((first as Error).message ?? first) });
+        setAudioSession("auto");
+        await new Promise((r) => setTimeout(r, 150));
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
     } catch (err) {
       recording.current = false;
       setPhase("idle");
+      setAudioSession("playback");
       const name = (err as Error)?.name ?? String(err);
-      diag("rec-error", { by, name });
+      diag("rec-error", { by, name, message: String((err as Error)?.message ?? "") });
       if (name === "NotAllowedError") {
         setMicNote("The microphone is blocked for this page. Tap the AA or settings icon next to the address, allow the microphone, and try again. Or use the keyboard microphone.");
       } else {
@@ -396,6 +406,7 @@ export default function OwnerApp() {
     if (!recording.current) {
       // stopped before the microphone opened
       stream.getTracks().forEach((tr) => tr.stop());
+      setAudioSession("playback");
       return;
     }
     // a permission prompt in between means he lifted his finger to answer it: keep recording until a tap
@@ -406,6 +417,7 @@ export default function OwnerApp() {
       rec = type ? new MediaRecorder(stream, { mimeType: type }) : new MediaRecorder(stream);
     } catch (err) {
       stream.getTracks().forEach((tr) => tr.stop());
+      setAudioSession("playback");
       recording.current = false;
       setPhase("idle");
       diag("rec-error", { by, name: "MediaRecorder", message: String(err) });
@@ -419,6 +431,7 @@ export default function OwnerApp() {
     };
     rec.onstop = () => {
       stream.getTracks().forEach((tr) => tr.stop());
+      setAudioSession("playback"); // the answer plays through the speaker
       const m = media.current;
       if (m) clearTimeout(m.limit);
       media.current = null;
@@ -435,7 +448,7 @@ export default function OwnerApp() {
   }
 
   function stopRecording() {
-    unlockSpeech();
+    unlockSpeech(true); // still recording for a moment: keep the microphone's session
     const m = media.current;
     if (!m) {
       recording.current = false; // still waiting for the microphone: drop it when it opens

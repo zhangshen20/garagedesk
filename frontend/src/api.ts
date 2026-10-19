@@ -259,7 +259,7 @@ export interface OwnerJob extends Job {
 /** The next step the app just offered out loud; a plain "yes" does it. */
 export interface OwnerOffer {
   id: number;
-  action: "send" | "paid" | "none";
+  action: "send" | "paid" | "order" | "none";
   job_id: number | null;
   say: string;
 }
@@ -275,7 +275,7 @@ export interface OwnerResult {
   say_full?: string;
   offer?: OwnerOffer | null;
   /** kind "done": what a short yes did */
-  action?: "sent" | "paid" | "";
+  action?: "sent" | "paid" | "ordered" | "";
   warnings?: string[];
   transcript?: string;
   paid_method?: string;

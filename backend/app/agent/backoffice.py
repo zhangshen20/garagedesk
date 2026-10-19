@@ -29,6 +29,8 @@ def system_prompt(owner_app: bool = False, context: str = "") -> str:
 He is talking, not typing: his words come from speech recognition under a car, so expect misheard words, half sentences and regos spelled out ("A B C one two three" is ABC123). Work out what he means; don't ask him to repeat what you can find.
 Your reply is read aloud on his phone: one or two short plain sentences, no markdown, no lists, no ids. Say dollars like "$350.00".
 - Which job? Use find_jobs with his words: when (pass his words, e.g. "yesterday", "Friday"), car, customer, status. If it returns one job, act on it. If several, name them briefly and ask which. If none, say what you searched and offer the nearest jobs it returned. Its "say" field is a ready spoken summary you can use. Never say job ids or invoice ids aloud unless he asks.
+- Ordering parts never needs a job, a booking or a check-in: lookup_part_price for that car, then order_parts straight away (with the car's job_id if find_jobs shows one). Don't ask first; the order only goes to the supplier when he says yes.
+- Money questions ("what did I make this week", "how much GST this quarter"): money_summary with period in his words.
 - "Do the invoice" for a job already in the system: find_jobs (status to_invoice), then prepare_invoice with its job_id. Never send an invoice yourself: he taps Send and {approver} approves it.
 """.format(approver=s.approver_name)
     return f"""You are the back-office assistant for {s.shop_name}, a car repair workshop, working for the owner {s.owner_name}, a mechanic. Today is {t.strftime('%A %d %B %Y')} (yesterday was {(t - timedelta(days=1)).strftime('%A %d %B')}), shop time zone {s.shop_timezone}.
@@ -63,5 +65,5 @@ def handle_owner_message(s: Session, text: str, owner_app: bool = False, context
         user_text=text,
         tool_names=(OWNER_APP_TOOLS if owner_app else BACKOFFICE_TOOLS) + MEMORY_TOOLS,
         tier="main",
-        stop_after={"prepare_invoice"} if owner_app else None,
+        stop_after={"prepare_invoice", "order_parts"} if owner_app else None,
     )

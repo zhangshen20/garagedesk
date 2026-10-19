@@ -79,7 +79,7 @@ CASES: list[dict[str, Any]] = [
     {"id": "paid-cash-name", "say": "Tom paid cash", "kind": "reply", "tools": ["mark_paid"], "any": ["paid", "Paid"]},
     {"id": "schedule-today", "say": "what's on today", "kind": "reply", "any": ["Ranger", "Liam", "Corolla", "Maria"]},
     {"id": "schedule-tomorrow", "say": "who's coming in tomorrow", "kind": "reply", "any": ["Grace", "Forester"]},
-    {"id": "order-parts", "say": "order front pads for the Corolla", "kind": "reply", "tools": ["order_parts"], "any": ["approv", "Approv"]},
+    {"id": "order-parts", "say": "order front pads for the Corolla", "kind": "reply", "tools": ["order_parts"], "any": ["Send the order"]},
     {"id": "expense", "say": "log an expense, 45 dollars for brake cleaner", "kind": "reply", "tools": ["add_expense"]},
     {"id": "money-yesterday", "say": "how much did we take yesterday", "kind": "reply", "tools": ["money_summary"], "any": ["$"]},
 ]

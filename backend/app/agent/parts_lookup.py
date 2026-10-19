@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -19,7 +20,7 @@ log = logging.getLogger(__name__)
 
 
 def lookup_part_price(s: Session, query: str, vehicle: str = "") -> dict[str, Any]:
-    local = _local_matches(s, query)
+    local = _local_matches(s, query, vehicle)
     web = _web_search(f"{query} {vehicle} price Australia auto parts".strip())
     offers: list[dict[str, Any]] = []
     if web:
@@ -40,13 +41,25 @@ def lookup_part_price(s: Session, query: str, vehicle: str = "") -> dict[str, An
     }
 
 
-def _local_matches(s: Session, query: str) -> list[Part]:
+def _local_matches(s: Session, query: str, vehicle: str = "") -> list[Part]:
     words = [w for w in query.lower().split() if len(w) > 2]
     # Need most of the query to match, so "brake pads toyota" doesn't pull in
     # every Toyota part on the shelf.
     need = max(1, (len(words) + 1) // 2)
-    parts = s.exec(select(Part)).all()
-    return [p for p in parts if sum(w in p.name.lower() for w in words) >= need]
+    from .knowhow import cars_in
+
+    car = set(re.findall(r"[a-z0-9]+", f"{query} {vehicle}".lower()))
+    named = bool(vehicle.strip() or cars_in(query))  # no car named: anything on the shelf
+    out = []
+    for p in s.exec(select(Part)).all():
+        name = p.name.lower()
+        # "Brake pads front - Toyota Corolla" only fits a Corolla: never offer it for a Kia
+        fits = set(re.findall(r"[a-z0-9]+", name.split(" - ", 1)[1])) if " - " in name else set()
+        if named and fits and not (fits & car):
+            continue
+        if sum(w in name for w in words) >= need:
+            out.append(p)
+    return out
 
 
 def _web_search(q: str) -> list[dict[str, Any]]:

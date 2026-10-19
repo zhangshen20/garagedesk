@@ -3,13 +3,14 @@ offered, and a plain "yes" or "no" acting on that offer."""
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from sqlmodel import Session, select
 
 from .. import services as svc
 from ..agent import memory
-from ..models import Invoice, InvoiceStatus, Job
+from ..models import Approval, ApprovalStatus, Invoice, InvoiceStatus, Job
 from . import offers, spoken, tts
 
 
@@ -27,7 +28,9 @@ def with_voice(r: dict[str, Any]) -> dict[str, Any]:
             r["offer"] = offers.put("send", spoken.ask_send(), job_id=job["job_id"])
     else:
         # agent answers can run long on screen; out loud, the first two sentences
-        r.setdefault("say", "\n".join(spoken.sentences(spoken.say_money(r.get("readback") or ""))[:2]))
+        # invoice numbers stay on screen; out loud they're noise
+        heard = re.sub(r"\s*\(INV-[\d-]+\)", "", r.get("readback") or "")
+        r.setdefault("say", "\n".join(spoken.sentences(spoken.say_money(heard))[:2]))
         r.setdefault("offer", offers.current())
     r["say_full"] = spoken.say_money(r.get("readback") or "")
     tts.prepare(spoken.sentences(r["say"]))
@@ -40,8 +43,16 @@ def reply_to_offer(s: Session, text: str) -> dict[str, Any] | None:
     said = offers.answer(text, extra=set(who.lower().split()))
     if not said:
         return None
-    # the offer lives in memory only; after a restart the last clean draft still waits on his yes
+    # the offer is also kept on disk; failing that, the last clean draft still waits on his yes
     o = offers.current() or (memory.waiting_on_yes(s) if said == "yes" else None)
+    since = _turns_since(s, offers.turn()) if offers.current() else []
+    if since and since[-1].outcome.rstrip().endswith("?") and since[-1].kind != "draft":
+        # the app has asked him something since that offer: "yes" answers the question
+        return None
+    if o and since and said == "yes" and not _names_action(text, o["action"]):
+        # they've talked about other things since: a bare "yes" may not mean this, so
+        # say what it would do and let him say it
+        return _done(_confirm(s, o), ok=False)
     if said == "no":
         offers.clear()
         return _done("No worries." if o else "Okay.")
@@ -56,6 +67,13 @@ def reply_to_offer(s: Session, text: str) -> dict[str, Any] | None:
         if "invoice" in text.lower():
             return _done("Which car's invoice?", ok=False)
         return _done("Nothing waiting on a yes. Tell me the car and what you did.", ok=False)
+    if o["action"] == "order":
+        offers.clear()
+        a = s.get(Approval, o.get("approval_id") or 0)
+        if not a or a.status != ApprovalStatus.pending:
+            return _done("That order's already been dealt with.")
+        svc.decide_approval(s, a, True, actor="owner")
+        return _done("Order sent.", action="ordered")
     job = s.get(Job, o["job_id"]) if o.get("job_id") else None
     if not job:
         offers.clear()
@@ -84,6 +102,40 @@ def reply_to_offer(s: Session, text: str) -> dict[str, Any] | None:
     return None
 
 
+def _last_turn_id(s: Session) -> int:
+    from ..models import OwnerTurn
+
+    last = s.exec(select(OwnerTurn).order_by(OwnerTurn.id.desc())).first()  # type: ignore[union-attr]
+    return last.id or 0 if last else 0
+
+
+def _turns_since(s: Session, turn: int | None) -> list[Any]:
+    """What he said after the offer was made (oldest first)."""
+    if turn is None:
+        return []
+    return [t for t in memory.recent_turns(s, 5) if (t.id or 0) > turn]
+
+
+_ACTION_WORDS = {"send": r"\bsend\b", "order": r"\b(send|order)\b", "paid": r"\bpaid\b"}
+
+
+def _names_action(text: str, action: str) -> bool:
+    return bool(re.search(_ACTION_WORDS.get(action, r"$^"), text, re.I))
+
+
+def _confirm(s: Session, o: dict[str, Any]) -> str:
+    job = s.get(Job, o["job_id"]) if o.get("job_id") else None
+    if o["action"] == "send" and job:
+        v = svc.job_view(s, job)
+        return f"Say 'send it' to send {spoken.first_name(v['customer']) or 'the'}'s {spoken.car_name(v['vehicle'])} to {spoken.approver()}."
+    if o["action"] == "paid" and job:
+        v = svc.job_view(s, job)
+        return f"Say 'paid' when {spoken.first_name(v['customer']) or 'they'} has paid for the {spoken.car_name(v['vehicle'])}."
+    if o["action"] == "order":
+        return "Say 'send the order' to send that parts order."
+    return "Nothing waiting on a yes. Tell me the car and what you did."
+
+
 def _done(say: str, ok: bool = True, job: dict[str, Any] | None = None, action: str = "") -> dict[str, Any]:
     r = {"kind": "done", "ok": ok, "readback": say, "say": say, "job": job, "action": action, "offer": offers.current()}
     tts.prepare(spoken.sentences(say))
@@ -101,7 +153,9 @@ def after_approval(s: Session, job: Job | None, approved: bool, note: str | None
     if approved:
         say = f"{who[:1].upper()}{who[1:]} approved {car}. The invoice is with {first or 'the customer'}. Say yes when they've paid on EFTPOS."
         offers.put("paid", say, job_id=job.id, ttl_s=8 * 3600)
+        offers.anchor(_last_turn_id(s))
     else:
         say = f"{who[:1].upper()}{who[1:]} sent back {car}" + (f": {note.strip().rstrip('.')}." if note and note.strip() else ".") + " Say it again to fix it."
         offers.put("none", say, job_id=job.id, ttl_s=3600)
+        offers.anchor(_last_turn_id(s))
     tts.prepare(spoken.sentences(say))

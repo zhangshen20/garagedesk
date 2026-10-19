@@ -17,7 +17,16 @@ from sqlmodel import Session, select
 
 from .. import services as svc
 from ..config import get_settings
-from ..models import Booking, Invoice, InvoiceStatus, Job, JobLine, JobStatus
+from ..models import (
+    Approval,
+    ApprovalStatus,
+    Booking,
+    Invoice,
+    InvoiceStatus,
+    Job,
+    JobLine,
+    JobStatus,
+)
 
 # words that say nothing about which car he means
 _STOP = {
@@ -119,6 +128,8 @@ def _view(s: Session, job: Job) -> dict[str, Any]:
         "invoice_status": inv.status.value if inv else None,
         "total_cents": v["total_cents"],
         "has_lines": bool(v["lines"]),
+        # sent to whoever does the books and not approved yet
+        "awaiting_approval": bool(s.exec(select(Approval).where(Approval.kind == "invoice", Approval.ref_id == job.id, Approval.status == ApprovalStatus.pending)).first()),
     }
 
 
@@ -196,6 +207,8 @@ def describe(j: dict[str, Any]) -> str:
         "in_progress": "still being worked on",
         "waiting_parts": "waiting on parts",
     }.get(j["status"], j["status"].replace("_", " "))
+    if j.get("awaiting_approval") and j["status"] not in ("invoiced", "paid"):
+        state = f"with {get_settings().approver_name} to approve"
     return f"{first}'s {car}, {j['work'].split(' - ')[0].lower()}, {j['when']}, {state}"
 
 
@@ -210,8 +223,14 @@ def spoken_list(found: dict[str, Any], intro: str = "") -> str:
     if len(jobs) == 1 and not intro:
         return describe(jobs[0])[:1].upper() + describe(jobs[0])[1:] + "."
     where = found["searched"]
-    head = intro or (f"{len(jobs)} jobs" + (f" for {where}" if where != "any day" else "") + ":")
-    return head + " " + "; ".join(describe(j) for j in jobs) + "."
+    if where == "any day":
+        where = ""
+    elif not where.startswith(("not invoiced", "still ")):
+        where = f"for {where}"
+    head = intro or (f"{len(jobs)} jobs" + (f" {where}" if where else "") + ":")
+    # read out loud, so a long list stops at four
+    more = f"; and {len(jobs) - 4} more" if len(jobs) > 5 else ""
+    return head + " " + "; ".join(describe(j) for j in jobs[: 4 if more else 5]) + more + "."
 
 
 def prepare_invoice(s: Session, job: Job) -> dict[str, Any]:

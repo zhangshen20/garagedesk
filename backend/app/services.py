@@ -122,8 +122,19 @@ def parse_period(value: str | None) -> tuple[date, date]:
         return monday - timedelta(days=7), monday - timedelta(days=1)
     if v in ("last few days", "the last few days", "past few days", "recently", "lately", "this past week", "past week", "the past week", "last 7 days"):
         return t - timedelta(days=7), t
-    if v in ("this month",):
+    if v in ("this month", "the month", "month to date"):
         return t.replace(day=1), t
+    if v in ("last month", "the month before"):
+        end = t.replace(day=1) - timedelta(days=1)
+        return end.replace(day=1), end
+    q_start = date(t.year, 3 * ((t.month - 1) // 3) + 1, 1)
+    if v in ("this quarter", "the quarter", "quarter to date"):
+        return q_start, t
+    if v in ("last quarter", "the quarter before", "previous quarter"):
+        end = q_start - timedelta(days=1)
+        return date(end.year, 3 * ((end.month - 1) // 3) + 1, 1), end
+    if v in ("this year", "the year"):
+        return date(t.year, 1, 1), t
     d = parse_day(v, past=True)
     return d, d
 

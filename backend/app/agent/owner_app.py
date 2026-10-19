@@ -23,7 +23,7 @@ from sqlmodel import Session, select
 
 from .. import services as svc
 from ..llm import get_llm
-from ..models import Booking, Channel, Job, Message
+from ..models import Booking, Channel, Job, JobStatus, Message
 from . import memory
 from .backoffice import OWNER_CONVERSATION_ID, handle_owner_message
 from .frontdesk import get_or_create_conversation
@@ -65,6 +65,11 @@ _WANTS_INVOICE = re.compile(
 _QUESTION = re.compile(r"^\s*(?:and\s+|so\s+)?(what|what's|whats|when|where|who|which|how|why|did|does|has|have|is|are|was|were)\b(?!\s+(?:the|a|an)\s+\w+\s+(?:on|for)\b)", re.I)
 _WAITING = re.compile(r"\bwaiting (?:on|for)\b", re.I)
 
+# booking a car in is diary work, never a write-up, even when it names a service
+_BOOKING = re.compile(r"\bbook(?:ed)?\s+(?:[\w']+\s+){0,3}in\b|\bbook (?:him|her|them|a|an|the)\b|\b(?:make|take) a booking\b|\b(?:pencil|squeeze)\s+(?:[\w']+\s+){0,3}in\b|\b(?:reschedule|move|cancel)\b[^.?]*\bbooking\b", re.I)
+# "same as last time": last visit's work and figures, written up as today's job
+_SAME_AGAIN = re.compile(r"\bsame (?:as|again|thing|job|work)\b|\bsame as (?:last|before|usual)\b|\bthe usual\b", re.I)
+
 _DAY_WORDS = re.compile(r"\b(yesterday|yday|today|morning|arvo|afternoon|tonight|tomorrow|week|month|days?|ago|monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|tues|wed|thu|thurs|fri|sat|sun|\d{1,2}(?:st|nd|rd|th)?|\d{1,2}/\d{1,2}|january|february|march|april|may|june|july|august|september|october|november|december|recently|lately)\b", re.I)
 
 
@@ -77,7 +82,7 @@ def _said(when: str, text: str, context: list[dict[str, str]] | None) -> bool:
 
 def _status_from(text: str) -> str:
     t = text.lower()
-    if re.search(r"(\bnot|n't|\bnever|yet to be|still to be|need(?:s)? to be|to be) invoiced\b|\bnot (?:been )?billed\b|\bstill to (?:invoice|bill)\b|\bneeds? (?:an )?invoic", t):
+    if re.search(r"(\bnot|n't|\bnever|yet to be|still to be|need(?:s)? to be|to be)(?: been| got| gotten| had)? (?:invoiced|billed)\b|\buninvoiced\b|\bno invoice\b|\bstill to (?:invoice|bill)\b|\bneeds? (?:an )?invoic", t):
         return "to_invoice"
     if re.search(r"\b(owes?|owing|unpaid|outstanding|not paid|n't paid|hasn't paid|haven't paid)\b", t):
         return "unpaid"
@@ -115,13 +120,16 @@ def route(text: str, context: list[dict[str, str]] | None = None) -> dict[str, A
             intent = "find"
         elif _WAITING.search(text):
             intent = "other"
+    if _BOOKING.search(text) and not _WORK.search(text):
+        intent = "other"
+    elif _SAME_AGAIN.search(text) and not _QUESTION.match(text):
+        intent = "job_card"
     when = str(out.get("when") or "").strip()
     # a small model sometimes fills in a day he never said
     if when and not _said(when, text, context):
         when = ""
-    status = str(out.get("status") or "").strip()
-    if not status:
-        status = _status_from(text)
+    # what he plainly said beats the model's guess
+    status = _status_from(text) or str(out.get("status") or "").strip()
     return {
         "intent": intent,
         "when": when,
@@ -174,13 +182,13 @@ def _reply(text: str, readback: str, model: str, **extra: Any) -> dict[str, Any]
 
 # Questions the job search can't answer from a list (bookings, what was charged, a
 # car's history, "what did that come to"): the agent answers these with its memory.
-_ASK_AGENT = re.compile(r"\b(booked|booking|charged?|come to|came to|cost|how much|last time|last in|usually|remember|notes?)\b", re.I)
+_ASK_AGENT = re.compile(r"\b(booked|booking|bookings|charged?|come to|came to|cost|how much|last time|last in|usually|remember|notes?|take|took|takings|make|made|earn|earned|gst|bas|spent|expenses?|tomorrow|coming in|arriving)\b", re.I)
 
 
-def _booked_today(s: Session, hint: str) -> str:
-    """A car booked in today that has no job yet, e.g. "Liam's Ford Ranger"."""
+def _booking_today(s: Session, hint: str) -> dict[str, Any] | None:
+    """A car booked in today that has no job yet."""
     if not hint:
-        return ""
+        return None
     from .joblookup import _close, _words, spoken_key
 
     for b in s.exec(select(Booking).where(Booking.day == svc.today())).all():
@@ -190,8 +198,68 @@ def _booked_today(s: Session, hint: str) -> str:
         plate = v["vehicle"].split()[-1] if v["vehicle"] else ""
         have = _words(f"{v['vehicle']} {v['customer']}")
         if (plate and plate.upper() in spoken_key(hint)) or any(_close(w, h) for w in _words(hint) for h in have):
-            return f"{(v['customer'] or 'The customer').split()[0]}'s {' '.join(v['vehicle'].split()[:-1])}"
-    return ""
+            return v
+    return None
+
+
+def _booked_today(s: Session, hint: str) -> str:
+    """A car booked in today that has no job yet, e.g. "Liam's Ford Ranger"."""
+    v = _booking_today(s, hint)
+    return f"{(v['customer'] or 'The customer').split()[0]}'s {' '.join(v['vehicle'].split()[:-1])}" if v else ""
+
+
+# changing a job that's already written up: "take the labour off the Nissan",
+# "change the labour on the Corolla to two hours", "add wipers to Jack's car, 45"
+_EDIT = re.compile(r"\b(?:take|knock)\b[^.?]*\b(?:off|out)\b|\b(?:remove|delete)\b|\bdrop\b[^.?]*\b(?:off|from)\b|\bchange\b[^.?]*\bto\b|\b(?:add|put)\b[^.?]*\b(?:to|on|onto)\b[^.?]*\b(?:invoice|job|car|bill)\b|\b(?:add|put)\b[^.?]*\b(?:to|on|onto) (?:the|his|her|\w+'s)\b", re.I)
+_DID = re.compile(r"\b(replaced|fitted|did|done|finished|serviced|repaired|fixed|machined)\b", re.I)
+_EDITABLE = [JobStatus.quoted, JobStatus.approved, JobStatus.in_progress, JobStatus.waiting_parts, JobStatus.done]
+
+
+def named_job(s: Session, text: str) -> Job | None:
+    """The one open job whose car or customer he named: make, model, rego or first name."""
+    from .joblookup import _close, spoken_key
+
+    words = set(re.findall(r"[a-z0-9]+", text.lower().replace("'s ", " ")))
+    flat = spoken_key(text)
+    best: list[tuple[int, Job]] = []
+    for j in s.exec(select(Job).where(Job.status.in_(_EDITABLE)).order_by(Job.updated_at.desc())).all():  # type: ignore[attr-defined]
+        v = svc.job_view(s, j)
+        score = 0
+        if v["rego"] and len(v["rego"]) >= 4 and v["rego"].upper() in flat:
+            score = 100
+        parts = v["vehicle"].split()
+        car = [re.sub(r"[^a-z0-9]", "", w.lower()) for w in parts[:-1]] if len(parts) > 1 else []
+        compact = re.sub(r"[^a-z0-9]", "", text.lower())
+        score += sum(10 for c in car if len(c) >= 3 and (c in compact or any(_close(c, w) for w in words)))
+        first = (v["customer"] or "").split()[0].lower() if v["customer"] else ""
+        if first and first in words:
+            score += 10
+        if score:
+            best.append((score, j))
+    if not best:
+        return None
+    top = max(sc for sc, _ in best)
+    hits = [j for sc, j in best if sc == top]
+    return hits[0] if len(hits) == 1 else None
+
+
+def edit_for(s: Session, text: str) -> dict[str, Any] | None:
+    """A change to a job already written up. None when it isn't one."""
+    if not _EDIT.search(text) or _BOOKING.search(text) or _DID.search(text):
+        return None
+    job = named_job(s, text)
+    if not job:
+        focus = memory.focus_job(s)
+        # "take the labour off it": the job he's on, as long as he didn't name another car
+        if focus and focus.status in _EDITABLE and not memory.mentioned(s, text):
+            job = focus
+    if not job:
+        return None
+    from .jobcard import edit_job
+
+    d = edit_job(s, job, text, context=memory.owner_context(s, text, for_extract=True))
+    # the job as it now stands, so a further "make it 300 all up" keeps the rest
+    return {"kind": "draft", **d.as_dict(), "described": memory.job_in_words(s, job)}
 
 
 def invoice_for(s: Session, text: str, r: dict[str, Any]) -> dict[str, Any]:
@@ -227,6 +295,17 @@ def invoice_for(s: Session, text: str, r: dict[str, Any]) -> dict[str, Any]:
 
 def find_for(s: Session, text: str, r: dict[str, Any]) -> dict[str, Any]:
     found = search_jobs(s, when=r["when"], car=r["car"], customer=r["customer"], status=r["status"])
+    # "what's the Civic in for": today's booking, not the job it had in September
+    if not r["when"] and not r["status"] and (r["car"] or r["customer"]) and not any(j["day"] == svc.today().isoformat() for j in found["jobs"]):
+        b = _booking_today(s, " ".join(x for x in (r["car"], r["customer"]) if x))
+        if b:
+            start = datetime.strptime(b["start"], "%H:%M").strftime("%-I:%M %p").replace(":00", "").lower()
+            who = f"{(b['customer'] or 'The customer').split()[0]}'s {' '.join(b['vehicle'].split()[:-1])}"
+            return _reply(text, f"{who} is booked in today at {start} for {b['service'].lower()}. Nothing written up on it yet.", r["model"], jobs=[])
+    if len(found["jobs"]) == 1 and found["jobs"][0].get("has_lines"):
+        # one job: say what it comes to as well
+        j = found["jobs"][0]
+        return _reply(text, spoken_list(found).rstrip(".") + f", ${j['total_cents'] / 100:,.2f}.", r["model"], jobs=found["jobs"])
     if not found["jobs"] and r["status"] and (r["car"] or r["customer"]):
         # "is the Hyundai paid": tell him where that car is at, whatever its state
         found = search_jobs(s, when=r["when"], car=r["car"], customer=r["customer"])
@@ -234,6 +313,7 @@ def find_for(s: Session, text: str, r: dict[str, Any]) -> dict[str, Any]:
 
 
 def handle_voice(s: Session, text: str) -> dict[str, Any]:
+    from ..voice import offers
     from ..voice.flow import reply_to_offer, with_voice
 
     # "yes" / "nah" answers the step the app just offered (send it, mark it paid)
@@ -246,11 +326,121 @@ def handle_voice(s: Session, text: str) -> dict[str, Any]:
     out = _handle(s, asked or text)
     if asked:
         out["transcript"] = text
-    memory.remember_turn(s, asked or text, out)  # what he said and which job it was about
-    return with_voice(out)
+    turn = memory.remember_turn(s, asked or text, out)  # what he said and which job it was about
+    out = with_voice(out)
+    offers.anchor(turn.id)  # a new offer made just now belongs to this turn
+    return out
+
+
+# "what's on today", "what have I got tomorrow", "who's coming in Friday": the diary, from code
+_SCHEDULE = re.compile(r"\b(what'?s on|what is on|what (?:have|do) (?:i|we) (?:got|have)|what'?ve (?:i|we) got|who'?s (?:coming|booked|in)|who is (?:coming|booked|in)|how many (?:cars|bookings|jobs)|what cars|which cars are (?:coming|booked)|(?:today'?s|tomorrow'?s) (?:cars|bookings|jobs|list))\b", re.I)
+_SCHEDULE_DAY = re.compile(r"\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", re.I)
+
+
+def schedule_for(s: Session, text: str) -> dict[str, Any] | None:
+    if not _SCHEDULE.search(text) or _WORK.search(text) or _status_from(text):
+        return None
+    m = _SCHEDULE_DAY.search(text)
+    # "what's on the Nissan invoice" is about a car, not the diary
+    if not m and not re.fullmatch(r"\W*(?:so\s+|and\s+|ok\s+)?(?:what'?s on|what is on|what (?:have|do) (?:i|we) (?:got|have)(?: on)?|what'?ve (?:i|we) got(?: on)?)\W*", text, re.I):
+        return None
+    if named_job(s, text):
+        return None
+    word = m.group(1).lower() if m else "today"
+    day = svc.parse_day(word)
+    from .joblookup import say_day
+
+    said = "today" if day == svc.today() else "tomorrow" if word == "tomorrow" else f"on {say_day(day) if day < svc.today() else day.strftime('%A')}"
+    bookings = s.exec(select(Booking).where(Booking.day == day).order_by(Booking.start)).all()  # type: ignore[arg-type]
+    state = {"in_progress": "on the hoist", "waiting_parts": "waiting on parts", "done": "done, not invoiced", "invoiced": "invoiced", "paid": "paid"}
+    items = []
+    for b in bookings:
+        if b.status.value in ("cancelled", "no_show"):
+            continue
+        v = svc.booking_view(s, b)
+        job = s.exec(select(Job).where(Job.booking_id == b.id)).first()
+        car = " ".join(v["vehicle"].split()[1:-1]) or "car"
+        when = datetime.strptime(v["start"], "%H:%M").strftime("%-I:%M%p").replace(":00", "").lower()
+        bit = f"{when} {(v['customer'] or 'someone').split()[0]}'s {car}, {v['service'].lower()}"
+        if job and job.status.value in state:
+            bit += f", {state[job.status.value]}"
+        items.append(bit)
+    n = len(items)
+    if not n:
+        return _reply(text, f"Nothing booked {said}.", "")
+    head = f"{'One car' if n == 1 else f'{n} cars'} {said}"
+    return _reply(text, f"{head}: " + "; ".join(items) + ".", "")
+
+
+def _known_words(s: Session) -> dict[str, str]:
+    """Every make, model, rego and customer first name the shop has, as he'd say them."""
+    from ..models import Customer, Vehicle
+
+    out: dict[str, str] = {}
+    for v in s.exec(select(Vehicle)).all():
+        for w in (v.make, v.model, v.rego):
+            if w and len(w) >= 3:
+                out[re.sub(r"[^a-z0-9]", "", w.lower())] = "car"
+    for c in s.exec(select(Customer)).all():
+        first = (c.name or "").split()[0].lower() if c.name else ""
+        if len(first) >= 3:
+            out[first] = "customer"
+    return out
+
+
+def _ground(s: Session, text: str, r: dict[str, Any]) -> dict[str, Any]:
+    """The router fills the car and customer from his words or, for "that one", from the
+    last exchange. When he did name a car or a person, it has to be the one he named:
+    "is the Hyundai paid" right after talking about Jack's CX-5 is about the Hyundai."""
+    known = _known_words(s)
+    flat = re.sub(r"[^a-z0-9 ]", " ", text.lower().replace("'s ", " "))
+    said = [w for w in flat.split() if w in known] + [k for k in known if len(k) >= 4 and k in flat.replace(" ", "") and k not in flat.split()]
+    if not said:
+        return r
+    def his(value: str) -> str:
+        # keep the model's words only where he said them ("Jack Thompson" when he said "Jack")
+        words = re.sub(r"[^a-z0-9 ]", " ", (value or "").lower()).split()
+        return " ".join(w for w in words if w in flat.split() or (len(w) >= 4 and w in flat.replace(" ", "")))
+
+    cars = [w for w in said if known[w] == "car"]
+    people = [w for w in flat.split() if known.get(w) == "customer"]
+    return {**r, "car": his(r.get("car", "")) or " ".join(dict.fromkeys(cars)), "customer": his(r.get("customer", "")) or " ".join(dict.fromkeys(people))}
+
+
+# "what did we take yesterday", "how much did I make this week", "how much GST this quarter"
+_MONEY_Q = re.compile(r"\b(?:what|how much)\b[^?]*\b(?:take|took|taken|make|made|earn|earned|takings|bring in|brought in|come in|came in|in the till)\b|\b(?:gst|bas)\b", re.I)
+_PERIOD = re.compile(r"\b(today|yesterday|(?:this|last) (?:week|month|quarter|year))\b", re.I)
+
+
+def money_for(s: Session, text: str) -> dict[str, Any] | None:
+    if not _MONEY_Q.search(text) or _WORK.search(text) or named_job(s, text):
+        return None
+    gst = bool(re.search(r"\b(?:gst|bas)\b", text, re.I))
+    m = _PERIOD.search(text)
+    period = m.group(1).lower() if m else ("this quarter" if gst else "today")
+    from .tools import REGISTRY
+
+    _, fn = REGISTRY["money_summary"]
+    r = fn(s, period=period)
+    d = lambda c: f"${c / 100:,.2f}"  # noqa: E731
+    if gst:
+        owe = r["gst_collected_cents"] - r["gst_paid_cents"]
+        say = f"GST {period}: {d(r['gst_collected_cents'])} collected on invoices, {d(r['gst_paid_cents'])} paid on expenses, so " + (f"about {d(owe)} to pay." if owe >= 0 else f"about {d(-owe)} back.")
+    else:
+        say = f"{period[:1].upper()}{period[1:]} you took {d(r['cash_in_cents'])} and spent {d(r['cash_out_cents'])}."
+        if r["invoices_issued"]:
+            say += f" {r['invoices_issued']} invoice{'s' if r['invoices_issued'] != 1 else ''} went out."
+    return _reply(text, say, "", steps=[{"tool": "money_summary", "args": {"period": period}, "result": r}])
+
+
+_FILLER = re.compile(r"^[\s,.!?]*(?:(?:um+|uh+|er+|ah+|hmm+|mm+|oh|okay|ok|so|and|the|a|like|yeah|hello|hey|hi|test(?:ing)?|one two|mate)[\s,.!?]*)*$", re.I)
 
 
 def _handle(s: Session, text: str) -> dict[str, Any]:
+    if not text.strip() or _FILLER.match(text):
+        out = _reply(text, "Sorry, I didn't catch that. Hold the button and tell me the car and what you need.", "")
+        remember(s, text, out["readback"], "")
+        return out
     # "25" when he was just asked what to charge for the one unpriced part
     priced = memory.fill_price(s, text)
     if priced:
@@ -260,7 +450,17 @@ def _handle(s: Session, text: str) -> dict[str, Any]:
         return out
     # "make it 380 all up" straight after a draft: his earlier words plus the change
     amended = memory.amend_text(s, text)
-    r = {"intent": "job_card", "model": ""} if amended else route(text, recent_context(s))
+    if not amended:
+        diary = schedule_for(s, text) or money_for(s, text)
+        if diary:
+            remember(s, text, diary["readback"], "")
+            return diary
+        edited = edit_for(s, text)
+        if edited:
+            remember(s, text, edited["readback"], edited.get("model", ""))
+            return edited
+    r = {"intent": "job_card", "model": ""} if amended else _ground(s, text, route(text, recent_context(s)))
+
     if r["intent"] == "job_card":
         words = amended or text
         ctx = memory.owner_context(s, words, for_extract=True)
@@ -284,4 +484,37 @@ def _handle(s: Session, text: str) -> dict[str, Any]:
     for st in reversed(res.steps):
         if st["tool"] == "prepare_invoice" and st["result"].get("ok"):
             return _draft(text, {**st["result"], "readback": st["result"]["readback"]}, model)
+    # "the CX-5 is done": the customer's been told, and if the work is already written up
+    # the next thing he wants is its invoice, so have it ready to send
+    for st in reversed(res.steps):
+        if st["tool"] == "update_car_status" and st["result"].get("status") == "done" and st["result"].get("job_id"):
+            job = s.get(Job, st["result"]["job_id"])
+            d = prepare_invoice(s, job) if job else {"ok": False}
+            if d["ok"]:
+                told = f"Done, and {(st['result'].get('customer') or 'the customer').split()[0]}'s been told. "
+                out = _draft(text, {**d, "readback": told + d["readback"]}, model)
+                out["steps"] = res.steps
+                return out
+    # a parts order waits for a yes from him, here, not on a dashboard he never opens
+    for st in reversed(res.steps):
+        if st["tool"] == "order_parts" and st["result"].get("approval_id"):
+            return _order_offer(s, text, st["result"], model, res.steps)
     return _reply(text, res.reply, model, steps=res.steps)
+
+
+def _order_offer(s: Session, text: str, placed: dict[str, Any], model: str, steps: list[dict[str, Any]]) -> dict[str, Any]:
+    from ..models import PurchaseOrder
+    from ..voice import offers
+
+    po = s.get(PurchaseOrder, placed.get("po_id") or 0)
+    view = svc.po_view(s, po) if po else {"lines": [], "supplier": placed.get("supplier", ""), "total_cents": placed.get("total_cents", 0)}
+    def short(d: str) -> str:
+        # "FRONT Brake Pads for KIA CERATO 1.8 (YD) 2013-2020 – Ceramic, EP2240" -> "front brake pads for kia cerato 1.8"
+        return " ".join(re.split(r"\s[–-]\s|[(,;]", d)[0].split()[:7]).lower()
+
+    items = " and ".join(f"{l['qty']:g} x {short(l['description'])}" if l["qty"] != 1 else short(l["description"]) for l in view["lines"]) or "the parts"
+    items = items[:1].upper() + items[1:]
+    say = f"{items} from {view['supplier']}, ${view['total_cents'] / 100:,.2f} plus GST. Send the order?"
+    out = _reply(text, say, model, steps=steps)
+    out["offer"] = offers.put("order", say, approval_id=placed["approval_id"])
+    return out

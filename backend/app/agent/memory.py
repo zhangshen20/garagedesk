@@ -160,7 +160,37 @@ def is_answer(s: Session, text: str) -> bool:
     "the pads one", "45"."""
     if len(text.split()) > 6 or _NEW_ASK.search(text):
         return False
-    return bool(mentioned(s, text) or knowhow.cars_in(text) or knowhow.services_in(text) or re.search(r"\d", text))
+    return bool(mentioned(s, text) or knowhow.cars_in(text) or knowhow.services_in(text) or re.search(r"\d", text)
+                or _ORDINAL.search(text) or _DAY.search(text))
+
+
+_ORDINAL = re.compile(r"\b(first|1st|top|second|2nd|third|3rd|fourth|4th|last|bottom)\b", re.I)
+_ORDINAL_AT = {"first": 0, "1st": 0, "top": 0, "second": 1, "2nd": 1, "third": 2, "3rd": 2, "fourth": 3, "4th": 3, "last": -1, "bottom": -1}
+_DAY = re.compile(r"\b(today|yesterday|this morning|last week|the other day|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", re.I)
+_FILLER = {"the", "one", "a", "that", "for", "from", "on", "it", "its", "it's", "s", "mate", "please", "um", "uh", "oh"}
+
+
+def _listed(outcome: str) -> list[str]:
+    """The jobs a "which one?" reply read out: "3 jobs to invoice: A; B; C. Which one?"."""
+    m = re.search(r":\s*(.+?)\.\s*(?:Which one\?|Say which one\.)", outcome, re.S)
+    return [x.strip() for x in m.group(1).split("; ")] if m else []
+
+
+def pick_listed(outcome: str, text: str) -> str | None:
+    """Which of the jobs just read out he means: "the first one", "yesterday's", "the
+    Corolla". None unless exactly one fits."""
+    items = _listed(outcome)
+    if not items:
+        return None
+    o = _ORDINAL.search(text)
+    if o:
+        i = _ORDINAL_AT[o.group(1).lower()]
+        return items[i] if -len(items) <= i < len(items) else None
+    words = [w for w in re.findall(r"[a-z0-9-]+", text.lower().replace("'s", "")) if w not in _FILLER]
+    if not words:
+        return None
+    fits = [x for x in items if all(_compact(w) in _compact(x) for w in words)]
+    return fits[0] if len(fits) == 1 else None
 
 
 _NO_PRICE = re.compile(r"I don't have a price for (.+?)\.", re.I)
@@ -199,6 +229,15 @@ def fill_price(s: Session, text: str) -> Job | None:
     return job
 
 
+def waiting_on_yes(s: Session) -> dict[str, Any] | None:
+    """A clean draft he was just asked to send, from the turns kept in the database."""
+    last = recent_turns(s, 1)
+    if last and last[-1].kind == "draft" and last[-1].ready and last[-1].job_id \
+            and datetime.utcnow() - last[-1].created_at < timedelta(minutes=15):
+        return {"action": "send", "job_id": last[-1].job_id}
+    return None
+
+
 def answer_text(s: Session, text: str) -> str | None:
     """"The CX-5" straight after "which car?": what he asked for in the first place, with his
     answer, so the request carries on instead of starting over. None when the app didn't
@@ -209,7 +248,10 @@ def answer_text(s: Session, text: str) -> str | None:
         return None
     if not _ASKED.search(last[-1].outcome) or _NO_PRICE.search(last[-1].outcome) or not is_answer(s, text):
         return None
-    return f"{last[-1].said.rstrip(' .?!')}: {text}"
+    # "the first one" after a list: the job itself, as it was read out
+    # (by whose car it is: the work words would read as a new job to write up)
+    picked = pick_listed(last[-1].outcome, text)
+    return f"{last[-1].said.rstrip(' .?!')}: {picked.split(',')[0] if picked else text}"
 
 
 def amend_text(s: Session, text: str) -> str | None:
@@ -225,7 +267,11 @@ def amend_text(s: Session, text: str) -> str | None:
     if unpriced_draft(s) and re.search(r"\d", text) and len(text.split()) <= 12:
         draft = next(x for x in reversed(recent_turns(s, 2)) if x.kind == "draft")
         return f"{draft.described}\nThen he gave the price: {text}"
-    if not _AMEND.search(text):
+    # "45 for the pads" straight after the read-back: a new figure for the job on screen
+    # (a whole new description naming the car again replaces it instead)
+    new_figure = bool(re.search(r"\d", text)) and len(text.split()) <= 8 and not _NEW_ASK.search(text) \
+        and not mentioned(s, text) and not knowhow.cars_in(text)
+    if not (_AMEND.search(text) or new_figure):
         return None
     focus = focus_job(s)
     if not last or not focus or last[-1].kind != "draft" or last[-1].job_id != focus.id or not last[-1].described:
@@ -354,6 +400,28 @@ def route_context(s: Session) -> str:
     return f"Just before this he said \"{t.said[:160]}\" and you replied \"{t.outcome[:160]}\"."
 
 
+_BACK = re.compile(r"\b(it|that|this|same|again|she|he|her|his|him|they|them|their|one)\b", re.I)
+
+
+def refers_back(text: str) -> bool:
+    """"it", "that one", "same again": he means something already in the conversation."""
+    return bool(_BACK.search(text))
+
+
+def names_a_car(s: Session, text: str) -> bool:
+    """His words say which car or customer: a rego, a model or a name we know."""
+    return bool(mentioned(s, text) or knowhow.cars_in(text) or re.search(r"\b(?!\d+w\d+\b)(?=[a-z]*\d)(?=\d*[a-z])[a-z0-9]{5,7}\b", text, re.I))
+
+
+def ground_car(s: Session, ex: dict[str, Any], words: str) -> dict[str, Any]:
+    """New work with no car in his words ("front pads, hour and a half, 350 all up") is not
+    the job we talked about earlier unless he says "it" or "that one": drop the car the model
+    took from memory so we ask which car instead of billing the wrong customer."""
+    if not ex or names_a_car(s, words) or refers_back(words):
+        return ex
+    return {**ex, "car": "", "rego": "", "customer_name": ""}
+
+
 # --- the block every owner-facing prompt gets ---------------------------------------------
 
 
@@ -377,7 +445,8 @@ def owner_context(s: Session, text: str, *, for_extract: bool = False) -> str:
         parts.append("What he said to you lately, oldest first:\n" + "\n".join(rows))
 
     focus = focus_job(s)
-    if focus:
+    # for new work, the job he was on only matters if he points back at it
+    if focus and not (for_extract and not refers_back(text)):
         view = svc.job_view(s, focus)
         parts.append(
             f"The job he is on now (what \"it\" or \"that one\" mean): job {focus.id}, {view['customer']}'s {view['vehicle']}, "
@@ -386,7 +455,7 @@ def owner_context(s: Session, text: str, *, for_extract: bool = False) -> str:
         )
 
     cars = mentioned(s, text)
-    pronoun = re.search(r"\b(it|that|this|same|again|she|he|her|his|him|they|them|their|one)\b", text, re.I)
+    pronoun = refers_back(text)
     if not cars and pronoun and turns:
         # "and what's he driving" right after "how does Jack usually pay"
         cars = mentioned(s, f"{turns[-1].said} {turns[-1].outcome}", limit=1)

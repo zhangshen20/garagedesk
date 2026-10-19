@@ -40,7 +40,8 @@ def reply_to_offer(s: Session, text: str) -> dict[str, Any] | None:
     said = offers.answer(text, extra=set(who.lower().split()))
     if not said:
         return None
-    o = offers.current()
+    # the offer lives in memory only; after a restart the last clean draft still waits on his yes
+    o = offers.current() or (memory.waiting_on_yes(s) if said == "yes" else None)
     if said == "no":
         offers.clear()
         return _done("No worries." if o else "Okay.")

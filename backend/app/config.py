@@ -19,7 +19,10 @@ class Settings(BaseSettings):
     model_deep: str = "nvidia/Nemotron-3-Ultra-550b-a55b"
     # Reads photos of handwritten job cards; Nemotron Super then does the reasoning.
     model_vision: str = "openbmb/MiniCPM-V-4_5"
-    # Whisper model for recorded speech (faster-whisper, CPU); see agent/stt.py
+    # Recorded speech to text on the VM's CPU; see agent/stt.py. "parakeet" is NVIDIA
+    # Parakeet TDT (onnx-asr), "whisper" is faster-whisper with stt_model.
+    stt_engine: str = "parakeet"
+    parakeet_model: str = "nemo-parakeet-tdt-0.6b-v2"
     stt_model: str = "base.en"
     # "nebius" talks to Token Factory; "mock" is a deterministic stand-in used by
     # tests and by the demo when no key is configured.

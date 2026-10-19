@@ -13,3 +13,4 @@ frontend/dist/
 .DS_Store
 backend/models/
 backend/owner-day-files/
+backend/mem-files/

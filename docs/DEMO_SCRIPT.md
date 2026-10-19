@@ -54,9 +54,9 @@ Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 "Maria knows her car is ready before she walks in, and she gets a proper Australian tax invoice. The phone tells him his wife approved it, and when Maria pays on the EFTPOS terminal he just says yes, and the receipt goes out. The shop has no accounting software, and now it doesn't need any."
 
 ## 2:15–2:35  The rest of his day
-*Hold the button: "The CX-5 will be ready tomorrow afternoon." Show that customer's text. Then "remember Jack always pays cash" and, later, "how does Jack usually pay?" answered out loud. Then a fast montage, 3 seconds each: a customer booking a service in the web chat; "need front pads for the Mazda" turning into a parts order with a Tavily-found price waiting on Approvals; the Nemotron 3 Ultra end-of-day report.*
+*Hold the button: "The CX-5 will be ready tomorrow afternoon." Show that customer's text. Then "remember Jack always pays cash" and, later, "how does Jack usually pay?" answered out loud. Then a fast montage, 3 seconds each: a customer booking a service in the web chat; "what have I got on today?" answered from the diary; "order front pads for the Kia Cerato" read back with a Tavily-found price, then "yes"; the Nemotron 3 Ultra end-of-day report.*
 
-"Status updates text the customer, so nobody needs to come in and ask. Anything he tells it to remember, it remembers. And behind that one button is a whole back office: a front desk that answers customers and books cars, parts prices searched live with Tavily, and an end-of-day report written by Nemotron 3 Ultra."
+"Status updates text the customer, so nobody needs to come in and ask. Anything he tells it to remember, it remembers. And behind that one button is a whole back office: a front desk that answers customers and books cars, his diary and takings on request, parts ordered with a yes and priced live with Tavily, and an end-of-day report written by Nemotron 3 Ultra."
 
 ## 2:35–2:50  Close
 *Back to the owner under a car. Text overlay: "Admin calls to his wife: several a day → none." Then the GarageDesk name and the repo URL.*
@@ -77,7 +77,7 @@ Every scene below runs on the live demo at https://66-201-4-40.sslip.io.
 | 6 | "Jenny approved" spoken on his phone, "yes" marks Paid EFTPOS, receipt text | Owner app, then Outbox |
 | 7 | "CX-5 ready tomorrow" by voice, customer text; "remember Jack always pays cash", then "how does Jack usually pay?" | Owner app, then Outbox |
 | 8 | Customer booking in the web chat | /chat |
-| 9 | Parts order with a Tavily price waiting on Approvals | Dashboard |
+| 9 | "What have I got on today?"; "order front pads for the Kia Cerato" with a Tavily price, then "yes" | Owner app on the iPhone |
 | 10 | Ultra end-of-day report | Dashboard, Report page |
 | 11 | Close: owner under a car, the calls-to-wife number, repo URL | Workshop footage plus overlay |
 

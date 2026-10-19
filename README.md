@@ -42,8 +42,12 @@ One huge talk button: hold it and talk, let go to send (a tap to start and a tap
 | Says *"Find yesterday's jobs and prepare invoice"* | Nemotron Nano pulls out the day, rego, customer, car or status; code finds the job (Dan's X-Trail, finished yesterday) and the invoice draft is read back: $240.90 all up |
 | Taps "Add parts from a receipt photo" on the draft and photographs the supplier's receipt | A vision model on Token Factory (MiniCPM-V 4.5) reads it, adds each part to the job at cost, books the receipt as a parts expense with its GST, and reads back the new total |
 | Says *"The CX-5 is waiting on parts till Thursday"* | Texts that customer, so fewer people walk in to ask |
+| Says *"the CX-5 is done"* | Tells the customer and comes back with the CX-5's invoice ready to send |
+| Says *"take the labour off the Nissan"* or *"add wiper blades to the CX-5, 45"* | Changes that draft invoice and reads back the new total |
+| Asks *"what have I got on today?"*, *"how many cars tomorrow?"*, *"what did we take yesterday?"*, *"how much GST this quarter?"* | Answers straight from the shop's bookings and books |
+| Says *"book Grace in for Thursday at 9"* | Makes the booking |
 | Hears *"Jenny approved Maria's Corolla… Say yes when they've paid on EFTPOS"* and says "yes", taps Paid EFTPOS, or says *"Corolla paid on EFTPOS"* | Marks the invoice paid with the method and texts the receipt |
-| Says *"need front pads for the Mazda"* | Finds the price (shop catalogue plus Tavily live search) and drafts a parts order that waits for approval |
+| Says *"order front pads for the Kia Cerato"* | Finds the price (shop catalogue plus Tavily live search), drafts the order and asks; he says "yes" or taps **Send order** on the phone |
 
 The model never invents a price. The amounts he says are the charge; anything he leaves out comes from the shop's labour rate and parts list, and the read-back lets him correct it by just saying it again.
 
@@ -89,7 +93,7 @@ All model calls go through Token Factory's OpenAI-compatible endpoint (`https://
 
 ### Safety rails that make it usable for a real business
 
-- **A person approves anything that leaves the shop.** Invoices wait for his wife's tap; supplier orders wait for an approval. The owner hears every total read back first.
+- **A person approves anything that leaves the shop.** Invoices wait for his wife's tap; supplier orders wait for his spoken yes or a tap on Send order. The owner hears every total read back first, and a bare "yes" said after unrelated talk asks him to say "send it" before anything goes.
 - **The agent never invents a price.** Prices come from the shop's catalogue and labour rate, or from a live supplier search; quotes for new work are the owner's call.
 - **Every outbound message is logged** in an outbox. Without Twilio credentials the outbox *is* the delivery, so the whole product demos offline.
 - **Transcripts persist per phone number**, so a customer texting back an hour later continues the same conversation.
@@ -137,7 +141,7 @@ scheduler ─4pm / 5:45pm─────────────────▶ 
 - `backend/app/agent/tools.py`: the agent tools, schema and implementation side by side.
 - `backend/app/agent/frontdesk.py`, `backoffice.py`, `report.py`: the agents and their prompts.
 - `backend/app/agent/joblookup.py`: finds jobs by day, rego, customer, car or status. `backend/tests/owner_utterances.py` holds 47 real owner phrasings run on every PR; `backend/scripts/owner_eval_live.py` runs them on live Nemotron.
-- `backend/app/agent/memory.py`, `memory_tools.py`, `knowhow.py`: the owner agent's memory (recent turns, past visits, facts he asked it to keep) and its mechanic knowledge (common jobs, typical times, misheard car names). `backend/scripts/memory_live_eval.py` runs 12 multi-turn conversations on live Nemotron.
+- `backend/app/agent/memory.py`, `memory_tools.py`, `knowhow.py`: the owner agent's memory (recent turns, past visits, facts he asked it to keep) and its mechanic knowledge (common jobs, typical times, misheard car names). `backend/scripts/memory_live_eval.py` runs 12 multi-turn conversations on live Nemotron, and `backend/scripts/owner_day_live.py` walks a whole workshop day (13 flows, each from a page reload) through the phone's own endpoints.
 - `backend/app/voice/`: the short spoken read-back and the "yep" that answers the last question; `backend/app/agent/stt.py` and `backend/app/voice/tts.py` for speech.
 - `backend/app/services.py`: bookings, bays, GST, invoices, purchase orders, approvals. No LLM calls.
 - `frontend/`: Vite + React + Tailwind, built into `backend/static` and served by FastAPI.
@@ -147,7 +151,7 @@ scheduler ─4pm / 5:45pm─────────────────▶ 
 - **Nebius Token Factory** serves every model call through its OpenAI-compatible API with function calling. The design leans on having several Nemotron price/capability tiers behind one key: cheap Nano calls on every message, Super for the agents and invoice building, Ultra once a day, and a vision model for photos.
 - **NVIDIA Nemotron 3** (Nano, Super, Ultra) do all the language reasoning.
 - **NVIDIA Parakeet** (TDT 0.6B v2, int8 ONNX) turns the owner's recordings into text on the VM's CPU, because Token Factory has no speech model.
-- **Nebius AI Cloud** hosts the demo: one `cpu-d3` VM in eu-west1 runs the Docker image (API, built frontend, SQLite volume) behind Caddy with a Let's Encrypt certificate for the sslip.io name; see `deploy/nebius/`.
+- **Nebius AI Cloud** hosts the demo: one `cpu-d3` VM in eu-west1 runs the Docker image (API, built frontend, SQLite volume) behind Caddy with a Let's Encrypt certificate for the sslip.io name, and checks `main` every 5 minutes and redeploys itself, so a merged PR goes live on its own; see `deploy/nebius/`.
 - **Tavily** searches live supplier prices for parts the shop doesn't stock; Nemotron Nano turns the results into structured prices.
 
 Feedback on the tools is in [docs/FEEDBACK.md](docs/FEEDBACK.md). The demo video script is [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) and the Devpost text is [docs/SUBMISSION.md](docs/SUBMISSION.md).

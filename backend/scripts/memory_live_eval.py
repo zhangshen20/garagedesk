@@ -123,6 +123,14 @@ def has_part(word: str) -> Check:
     return lambda r, s: None if any(word in l["description"].lower() for l in lines(r) if l["kind"] == "part") else f"no {word} part line"
 
 
+def priced(word: str) -> Check:
+    def chk(r: dict[str, Any], s: Session) -> str | None:
+        got = [l for l in lines(r) if word in l["description"].lower()]
+        return None if got and all(l["unit_cents"] for l in got) else f"no priced {word} line"
+
+    return chk
+
+
 def not_draft(r: dict[str, Any], s: Session) -> str | None:
     return None if not (r.get("kind") == "draft" and r.get("ok")) else f"made a draft for {r['job']['rego']} it shouldn't have"
 
@@ -194,6 +202,30 @@ CONVERSATIONS: list[tuple[str, list[tuple[str, list[Check]]]]] = [
         ("what jobs did we finish yesterday", [says("i30", "priya")]),
         ("what did that one come to", [says("$", "dollars")]),
         ("did she pay", [says("paid", "yes", "eftpos")]),
+    ]),
+    # He answers the question the app just asked with a few words; the request he started carries on.
+    ("Which car? Then the car", [
+        ("the car is done", []),
+        ("the CX-5", [job_status("1KR9ZZ", JobStatus.done)]),
+    ]),
+    ("Which job? Then the job, then a change", [
+        ("update the invoice", [says("which")]),
+        ("the Corolla", [draft_for("ABC123")]),
+        ("add wipers 45", [draft_for("ABC123"), has_part("pad"), has_part("wiper")]),
+    ]),
+    ("Which car for the job he described? Then the car", [
+        ("front pads, hour and a half, 350 all up", [not_draft, no_new_customer]),
+        ("the Corolla", [draft_for("ABC123", 35000), has_part("pad")]),
+    ]),
+    ("What price? Then the price", [
+        ("Sofia's Cerato logbook service done, hour and a half, oil and filter", [draft_for("SR2020")]),
+        ("send it", [says("price", "charge")]),
+        ("25", [draft_for("SR2020"), labour_hours(1.5), has_part("oil"), priced("filter")]),
+        ("yep", [sent("SR2020")]),
+    ]),
+    ("Send which one? Then the customer", [
+        ("send the invoice", []),
+        ("Maria's", [draft_for("ABC123")]),
     ]),
 ]
 

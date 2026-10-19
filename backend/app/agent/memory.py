@@ -31,7 +31,9 @@ from ..models import (
     Invoice,
     InvoiceStatus,
     Job,
+    JobLine,
     JobStatus,
+    LineKind,
     OwnerFact,
     OwnerTurn,
     Vehicle,
@@ -96,11 +98,36 @@ def remember_turn(s: Session, said: str, out: dict[str, Any]) -> OwnerTurn:
     outcome = str(out.get("readback") or "")
     kind = str(out.get("kind") or "reply")
     ready = kind == "draft" and bool(out.get("ok")) and not out.get("warnings")
-    described = str(out.get("described") or said) if kind == "draft" else ""
+    described = ""
+    if kind == "draft":
+        # his own description when he gave one; for an invoice got ready from a job already
+        # on file ("the Corolla"), the job as it stands, so "add wipers" keeps the rest
+        described = str(out.get("described") or (job_in_words(s, job) if job else said))
     t = OwnerTurn(said=said, kind=kind, outcome=outcome[:600], ready=ready, described=described[:1000], job_id=job.id if job else None, customer_id=job.customer_id if job else None)
     s.add(t)
     s.flush()
     return t
+
+
+def job_in_words(s: Session, job: Job) -> str:
+    """The job as he'd say it on the phone: car, then each line with what it costs inc
+    GST (labour by the hour when it's at the shop rate), then the total if he set one."""
+    view = svc.job_view(s, job)
+    gst = 1 + get_settings().gst_rate
+    rate = get_settings().labour_rate_cents
+    bits = []
+    for l in view["lines"]:
+        if l["kind"] == "labour" and l["unit_cents"] == rate:
+            bits.append(f"{l['description']}, {l['qty']:g} hours labour")
+        elif l["kind"] == "labour":
+            bits.append(f"{l['description']}, labour {l['qty'] * l['unit_cents'] * gst / 100:.2f}")
+        else:
+            qty = f"{l['qty']:g} x " if l["qty"] != 1 else ""
+            bits.append(f"{qty}{l['description']} {l['qty'] * l['unit_cents'] * gst / 100:.2f}")
+    words = f"{view['customer']}'s {view['vehicle']}: " + "; ".join(bits)
+    if job.stated_total_cents:
+        words += f"; {job.stated_total_cents / 100:.2f} all up"
+    return words
 
 
 def recent_turns(s: Session, limit: int = RECENT_TURNS) -> list[OwnerTurn]:
@@ -121,6 +148,69 @@ _AMEND = re.compile(r"^\s*(?:(?:actually|no|nah|sorry|oh|and|also|plus|wait|hang
 
 _FILLS_IN = re.compile(r"\b(rego|registration|plate|customer|name is|owner is)\b", re.I)
 
+# the app asked him something it needs before it can act: which car, which job, what price
+_ASKED = re.compile(r"\?|\b(which (?:car|one|job)|say the rego|tell me the car|couldn't match|could you let me know)\b", re.I)
+# a fresh request or question rather than an answer to one
+_NEW_ASK = re.compile(r"\b(done|finished|ready|invoice|send|sent|paid|pay|order|book|booked|add|change|make|remove|cancel|waiting|remember|what|what's|when|how|who|why|is|has|did|does|can|yes|yep|yeah|no|nah|nope)\b", re.I)
+ASK_MINUTES = 10
+
+
+def is_answer(s: Session, text: str) -> bool:
+    """A few words naming a car, a customer, a job or a price: "the CX-5", "Maria's",
+    "the pads one", "45"."""
+    if len(text.split()) > 6 or _NEW_ASK.search(text):
+        return False
+    return bool(mentioned(s, text) or knowhow.cars_in(text) or knowhow.services_in(text) or re.search(r"\d", text))
+
+
+_NO_PRICE = re.compile(r"I don't have a price for (.+?)\.", re.I)
+
+
+def unpriced_draft(s: Session) -> tuple[Job, list[str]] | None:
+    """The draft he's just been asked to price, and what's missing a price, while it's fresh."""
+    turns = recent_turns(s, 2)
+    draft = next((t for t in reversed(turns) if t.kind == "draft"), None)
+    if not turns or not draft or not draft.job_id or draft.ready or not draft.described \
+            or datetime.utcnow() - turns[-1].created_at > timedelta(minutes=ASK_MINUTES):
+        return None
+    missing = _NO_PRICE.findall(turns[-1].outcome)
+    job = s.get(Job, draft.job_id)
+    return (job, missing) if job and missing else None
+
+
+def fill_price(s: Session, text: str) -> Job | None:
+    """"25" or "filter was 30 bucks" after "what do you charge for the oil filter?": put his
+    price (inc GST) on that line and leave everything else on the job as it is."""
+    held = unpriced_draft(s)
+    amounts = re.findall(r"\d+(?:\.\d{1,2})?", text)
+    if not held or len(held[1]) != 1 or len(amounts) != 1 or len(text.split()) > 8 or held[0].stated_total_cents:
+        return None
+    job = held[0]
+    unpriced = [l for l in s.exec(select(JobLine).where(JobLine.job_id == job.id)).all() if l.unit_cents == 0 and l.kind != LineKind.labour]
+    if len(unpriced) != 1:
+        return None
+    line = unpriced[0]
+    total = round(float(amounts[0]) * 100 / max(line.qty, 1))
+    line.unit_cents = total - svc.gst_in(total)
+    s.add(line)
+    job.updated_at = datetime.utcnow()
+    s.add(job)
+    s.flush()
+    return job
+
+
+def answer_text(s: Session, text: str) -> str | None:
+    """"The CX-5" straight after "which car?": what he asked for in the first place, with his
+    answer, so the request carries on instead of starting over. None when the app didn't
+    just ask him something or this isn't an answer. (A draft that couldn't find the car is
+    finished by amend_text; a ready draft's "Send it?" is answered by yes/no or a correction.)"""
+    last = recent_turns(s, 1)
+    if not last or last[-1].kind == "draft" or datetime.utcnow() - last[-1].created_at > timedelta(minutes=ASK_MINUTES):
+        return None
+    if not _ASKED.search(last[-1].outcome) or _NO_PRICE.search(last[-1].outcome) or not is_answer(s, text):
+        return None
+    return f"{last[-1].said.rstrip(' .?!')}: {text}"
+
 
 def amend_text(s: Session, text: str) -> str | None:
     """"Make it 380 all up" or "add wipers to that" straight after a draft: his earlier
@@ -128,9 +218,13 @@ def amend_text(s: Session, text: str) -> str | None:
     are rewritten. None when it isn't a correction to the job he's on."""
     last = recent_turns(s, 1)
     # "rego's GLF222, customer Ben Hall" after "I couldn't find the Golf": the same job, now findable
-    if last and last[-1].kind == "draft" and not last[-1].job_id and last[-1].described and _FILLS_IN.search(text) \
+    if last and last[-1].kind == "draft" and not last[-1].job_id and last[-1].described and (_FILLS_IN.search(text) or is_answer(s, text)) \
             and datetime.utcnow() - last[-1].created_at < timedelta(minutes=15):
         return f"{last[-1].described}\nThen he added: {text}"
+    # a price for more than one unpriced line: say it all again with his prices
+    if unpriced_draft(s) and re.search(r"\d", text) and len(text.split()) <= 12:
+        draft = next(x for x in reversed(recent_turns(s, 2)) if x.kind == "draft")
+        return f"{draft.described}\nThen he gave the price: {text}"
     if not _AMEND.search(text):
         return None
     focus = focus_job(s)

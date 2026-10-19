@@ -8,6 +8,7 @@ from typing import Any
 from sqlmodel import Session, select
 
 from .. import services as svc
+from ..agent import memory
 from ..models import Invoice, InvoiceStatus, Job
 from . import offers, spoken, tts
 
@@ -45,6 +46,14 @@ def reply_to_offer(s: Session, text: str) -> dict[str, Any] | None:
         return _done("No worries." if o else "Okay.")
     if not o or o["action"] == "none":
         offers.clear()
+        # "send it" while the draft still has a line with no price: ask for it, don't start over
+        held = memory.unpriced_draft(s) if said == "yes" else None
+        if held:
+            what = " ".join(f"I don't have a price for {m}." for m in held[1])
+            ask = "What do you charge for it?" if len(held[1]) == 1 else "What do you charge for them?"
+            return _done(f"Not yet. {what} {ask}", ok=False, job=svc.job_view(s, held[0]))
+        if "invoice" in text.lower():
+            return _done("Which car's invoice?", ok=False)
         return _done("Nothing waiting on a yes. Tell me the car and what you did.", ok=False)
     job = s.get(Job, o["job_id"]) if o.get("job_id") else None
     if not job:

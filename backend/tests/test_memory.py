@@ -59,3 +59,54 @@ def test_correction_keeps_what_he_said_before(client):
         assert memory.amend_text(s, "add wipers to that").startswith("Corolla ABC123 done")
         assert "380 all up" in memory.amend_text(s, "add wipers to that")
         assert memory.amend_text(s, "what's on today") is None
+
+
+def _asked(s, said, outcome, kind="reply", described="", job_id=None):
+    from app.models import OwnerTurn
+
+    s.add(OwnerTurn(said=said, kind=kind, outcome=outcome, described=described, job_id=job_id))
+    s.flush()
+
+
+def test_answer_to_a_question_carries_on_the_request(client):
+    from app.agent import memory
+    from app.db import session_scope
+
+    with session_scope() as s:
+        _asked(s, "the car is done", "Which car is done, the Corolla or the CX-5?")
+        assert memory.answer_text(s, "the CX-5") == "the car is done: the CX-5"
+        assert memory.answer_text(s, "Maria's") == "the car is done: Maria's"
+        # a fresh ask or a plain no is not an answer
+        assert memory.answer_text(s, "what's on today") is None
+        assert memory.answer_text(s, "the Hilux is done") is None
+        assert memory.answer_text(s, "nah") is None
+    with session_scope() as s:
+        _asked(s, "the Corolla's done", "Invoice for Maria's Toyota Corolla: labour 198.00. Send it?", kind="draft", job_id=1)
+        assert memory.answer_text(s, "the CX-5") is None  # "Send it?" is a yes/no, not a which-car
+
+
+def test_naming_the_car_finishes_the_job_he_described(client):
+    from app.agent import memory
+    from app.db import session_scope
+
+    with session_scope() as s:
+        _asked(s, "front pads, hour and a half, 350 all up", "I couldn't match which car it was. Say the rego.", kind="draft", described="front pads, hour and a half, 350 all up")
+        assert memory.amend_text(s, "the Corolla") == "front pads, hour and a half, 350 all up\nThen he added: the Corolla"
+
+
+def test_send_before_priced_asks_then_takes_his_price(client):
+    from app.db import session_scope
+    from app.models import Job, JobLine, LineKind
+
+    with session_scope() as s:
+        job = s.get(Job, 1)
+        s.add(JobLine(job_id=job.id, kind=LineKind.part, description="Oil filter", qty=1, unit_cents=0))
+        _asked(s, "add a filter", "Invoice for Maria's Toyota Corolla: ... I don't have a price for Oil filter. What do you charge for it?", kind="draft", described="Corolla, filter", job_id=job.id)
+        s.commit()
+    r = client.post("/api/owner/voice", json={"text": "send it"}).json()
+    assert r["readback"] == "Not yet. I don't have a price for Oil filter. What do you charge for it?"
+    r = client.post("/api/owner/voice", json={"text": "25"}).json()
+    assert r["kind"] == "draft" and r["transcript"] == "25"
+    filt = [l for l in r["job"]["lines"] if l["description"] == "Oil filter"][0]
+    assert filt["unit_cents"] == 2273  # $25.00 inc GST
+    assert "oil filter 25.00" in r["readback"] and r["readback"].endswith("Send it?")

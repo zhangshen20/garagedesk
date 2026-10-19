@@ -27,7 +27,7 @@ from ..models import Booking, Channel, Job, Message
 from . import memory
 from .backoffice import OWNER_CONVERSATION_ID, handle_owner_message
 from .frontdesk import get_or_create_conversation
-from .jobcard import draft_from_text
+from .jobcard import draft_from_text, readback
 from .joblookup import describe, prepare_invoice, search_jobs, spoken_list
 
 INTENT_PROMPT = """You read what a mechanic shop owner just said into his phone (speech recognition, so expect odd spelling, missing words and regos spelled out like "A B C one two three"). Today is {today}.
@@ -241,12 +241,23 @@ def handle_voice(s: Session, text: str) -> dict[str, Any]:
     if short is not None:
         memory.remember_turn(s, text, short)
         return short
-    out = _handle(s, text)
-    memory.remember_turn(s, text, out)  # what he said and which job it was about
+    # "the CX-5" after "which car?": carry on with what he asked for, now with the car
+    asked = memory.answer_text(s, text)
+    out = _handle(s, asked or text)
+    if asked:
+        out["transcript"] = text
+    memory.remember_turn(s, asked or text, out)  # what he said and which job it was about
     return with_voice(out)
 
 
 def _handle(s: Session, text: str) -> dict[str, Any]:
+    # "25" when he was just asked what to charge for the one unpriced part
+    priced = memory.fill_price(s, text)
+    if priced:
+        view = svc.job_view(s, priced)
+        out = _draft(text, {"ok": True, "job": view, "readback": readback(view, [])}, "")
+        remember(s, text, out["readback"], "")
+        return out
     # "make it 380 all up" straight after a draft: his earlier words plus the change
     amended = memory.amend_text(s, text)
     r = {"intent": "job_card", "model": ""} if amended else route(text, recent_context(s))

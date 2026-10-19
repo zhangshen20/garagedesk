@@ -345,6 +345,13 @@ def _hit_total(s: Session, job: Job, labour: JobLine | None, desc: str, hours: f
     return []
 
 
+def fix_ask(warnings: list[str]) -> str:
+    """What to ask him when the draft isn't ready: a straight question when it's only a price."""
+    if all(w.startswith("I don't have a price for") for w in warnings):
+        return "What do you charge for it?" if len(warnings) == 1 else "What do you charge for them?"
+    return "Say it again with that and I'll fix it."
+
+
 def readback(view: dict[str, Any], warnings: list[str]) -> str:
     first = (view["customer"] or "the customer").split()[0]
     car = " ".join(view["vehicle"].split()[:2]) or "car"
@@ -362,7 +369,7 @@ def readback(view: dict[str, Any], warnings: list[str]) -> str:
     total = view["total_cents"] / 100
     text = f"Invoice for {first}'s {car}: {listed}. {total:,.2f} dollars including GST."
     if warnings:
-        text += " " + " ".join(warnings) + " Say it again with that and I'll fix it."
+        text += " " + " ".join(warnings) + " " + fix_ask(warnings)
     else:
         text += " Send it?"
     return text

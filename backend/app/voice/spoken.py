@@ -106,7 +106,9 @@ def draft_say(view: dict[str, Any], warnings: list[str]) -> str:
     body = f" {said[:1].upper()}{said[1:]}." if said else ""
     total = f" {dollars(view.get('total_cents', 0))[:1].upper()}{dollars(view.get('total_cents', 0))[1:]} all up."
     if warnings:
-        return f"{head}{body}{total} " + " ".join(say_money(w) for w in warnings) + " Say it again to fix it."
+        from ..agent.jobcard import fix_ask
+
+        return f"{head}{body}{total} " + " ".join(say_money(w) for w in warnings) + " " + fix_ask(warnings)
     return f"{head}{body}{total} {ask_send()}"
 
 

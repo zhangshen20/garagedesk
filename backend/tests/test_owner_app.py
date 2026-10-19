@@ -249,3 +249,26 @@ def test_misheard_cars_are_put_back():
     assert fix("Toyota Corolla year 2012, master cylinder.") == "Toyota Corolla year 2012, master cylinder."
     # a car only this shop has comes from today's hint
     assert fix("Skoda Octavio front pads", "Cars in the workshop: Skoda Octavia 2AB3CD.") == "Skoda Octavia front pads"
+
+
+def test_accented_shop_words_are_put_back():
+    from app.agent.stt import fix_heard
+
+    hint = "Cars in the workshop: Nissan X-Trail DW4521, Mazda CX-5 1KR9ZZ, Kia Cerato SR2020."
+    # heard live on 2026-10-19 from an owner whose first language isn't English
+    assert fix_heard("CX-5, taxi and voice.", hint) == "CX-5, tax invoice."
+    assert fix_heard("CX-5, Corolla, taxi in voice.", hint) == "CX-5, Corolla, tax invoice."
+    assert fix_heard("Nissan X-7.", hint) == "Nissan X-Trail."
+    # from the accented test set (scripts/stt_accent_eval.py)
+    assert fix_heard("Mark the X trail paid by F-pose.", hint) == "Mark the X-Trail paid by EFTPOS."
+    assert fix_heard("Do the invoice for your go DW4521.", hint) == "Do the invoice for rego DW4521."
+    assert fix_heard("Front rotors for the Mazda, Rigo 1KR9ZZ.", hint) == "Front rotors for the Mazda, rego 1KR9ZZ."
+    assert fix_heard("Logbook service on the Kia Cerrado, two hours later.", hint) == "Logbook service on the Kia Cerato, two hours labour."
+    assert fix_heard("The Helix needs a timing belt.", hint) == "The Hilux needs a timing belt."
+    assert fix_heard("Roadworthy certificate for the Master CX file.", hint) == "Roadworthy certificate for the Mazda CX-5."
+    assert fix_heard("add an extra item to the sin voice", hint) == "add an extra item to the invoice"
+    assert fix_heard("Get the inverse for DW4521", hint) == "Get the invoice for DW4521"
+    # ordinary words stay
+    assert fix_heard("Text the customer, he'll pay later.", hint) == "Text the customer, he'll pay later."
+    assert fix_heard("Replaced the brake master cylinder.", hint) == "Replaced the brake master cylinder."
+    assert fix_heard("Regal blue Corolla, the rego is ABC123.", hint) == "Regal blue Corolla, the rego is ABC123."

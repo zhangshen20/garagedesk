@@ -61,6 +61,10 @@ def available() -> bool:
     return _mock() or _installed()
 
 
+def engine() -> str:
+    return "parakeet" if _parakeet() else "whisper"
+
+
 @lru_cache(maxsize=1)
 def _model():
     s = get_settings()
@@ -69,13 +73,31 @@ def _model():
 
         log.info("loading speech model %s", s.parakeet_model)
         return onnx_asr.load_model(s.parakeet_model, quantization="int8")
+    return _whisper()
+
+
+@lru_cache(maxsize=1)
+def _whisper():
     from faster_whisper import WhisperModel
 
+    s = get_settings()
     log.info("loading speech model %s", s.stt_model)
     return WhisperModel(s.stt_model, device="cpu", compute_type="int8")
 
 
-def transcribe(audio: bytes, extra_hint: str = "") -> str:
+def _whisper_text(audio: bytes, extra_hint: str) -> str:
+    prompt = (_HINT + " " + extra_hint).strip()
+    segments, _ = _whisper().transcribe(io.BytesIO(audio), language="en", beam_size=1, vad_filter=True, initial_prompt=prompt)
+    text = " ".join(seg.text.strip() for seg in segments).strip()
+    if not text:
+        # the voice filter dropped a short, quiet or accented clip (4 of 18 live
+        # recordings on 2026-10-19 came back empty): listen to all of it
+        segments, _ = _whisper().transcribe(io.BytesIO(audio), language="en", beam_size=1, vad_filter=False, initial_prompt=prompt)
+        text = " ".join(seg.text.strip() for seg in segments).strip()
+    return text
+
+
+def transcribe(audio: bytes, extra_hint: str = "", fix: bool = True) -> str:
     if _mock():
         return MOCK_TRANSCRIPT
     if not _installed():
@@ -87,12 +109,21 @@ def transcribe(audio: bytes, extra_hint: str = "") -> str:
             samples = decode_audio(io.BytesIO(audio), sampling_rate=16000)
             if len(samples) < 1600:  # under a tenth of a second
                 return ""
-            text = _model().recognize(samples, sample_rate=16000)
+            peak = float(abs(samples).max())
+            if 0.003 < peak < 0.3:  # held the phone away: bring a quiet voice up
+                samples = samples * (0.6 / peak)
+            try:
+                text = _model().recognize(samples, sample_rate=16000)
+            except Exception:
+                log.exception("parakeet failed, trying whisper")
+                text = _whisper_text(audio, extra_hint)
         else:
-            segments, _ = _model().transcribe(
-                io.BytesIO(audio), language="en", beam_size=1, vad_filter=True, initial_prompt=(_HINT + " " + extra_hint).strip()
-            )
-            text = " ".join(seg.text.strip() for seg in segments)
+            text = _whisper_text(audio, extra_hint)
+    return fix_heard(text, extra_hint) if fix else text.strip()
+
+
+def fix_heard(text: str, extra_hint: str = "") -> str:
+    """Put back the shop words, cars and plates an accent or the model got wrong."""
     return _fix_words(_fix_cars(text.strip(), extra_hint))
 
 
@@ -107,9 +138,33 @@ _FIXES = [
     (re.compile(r"  +"), " "),
 ]
 
+# Shop words an accent turns into other English words. Each was heard on today's
+# recordings or in the accented test set (scripts/stt_accent_eval.py), and none of
+# the wrong words means anything else in a workshop job.
+_SHOP_FIXES = [
+    # "taxi and voice", "taxing voice", "tux invoice" -> tax invoice
+    (re.compile(r"\b(?:taxi|taxing|tux|pax|tax)(?:[\s,]+(?:and|in|an|n))?[\s-]*(?:in)?voice(s?)\b", re.I), r"tax invoice\1"),
+    # "the sin voice", "this in voice", "get the inverse" -> invoice
+    (re.compile(r"\b(the|this|that|an|his|her|a|new) (?:sin |in |n )voice(s?)\b", re.I), r"\1 invoice\2"),
+    (re.compile(r"\binverse\b", re.I), "invoice"),
+    # "Rigo DW4521", "regal 1KR9ZZ", "your go D W..." before a plate -> rego
+    (re.compile(r"\b(?:rigo|rego|regal|regot|rigaud|regaux|reggo|ricco|rico|your go|re go|regard|regor)\b[,.]?(?=\s+(?:[A-Za-z]{1,3}\s?)?\d)", re.I), "rego"),
+    # EFTPOS heard as "F-pose", "F Post", "F-balls", "F.Bose"
+    (re.compile(r"\b(?:eft|f\.?|ef|after)[\s.-]?(?:t[\s.-]?)?(?:pos[e]?|post|poles?|poos|balls|bose|pause|pots)\b", re.I), "EFTPOS"),
+    # "two hours later" is two hours labour
+    (re.compile(r"\b(hours?|hour and a half|half an hour|an hour)\s+later\b", re.I), r"\1 labour"),
+    (re.compile(r"\bczech engine\b", re.I), "check engine"),
+    (re.compile(r"\b(?:helix|helux|hillux|hi-?lux|hylux|high lux)\b", re.I), "Hilux"),
+    (re.compile(r"\b(?:cerrado|serato|serrato|sarato|savato|cerrato)\b", re.I), "Cerato"),
+    (re.compile(r"\bcx[\s-]?(?:five|file|fife|hive)\b", re.I), "CX-5"),
+    (re.compile(r"\b(?:x[\s-]?trail|(?<=nissan )x[\s-]?(?:7|seven|ray|tray|trial))\b", re.I), "X-Trail"),
+    # "Master CX-5", "for the master" is a Mazda; a master cylinder stays one
+    (re.compile(r"\bmaster\b(?!\s+(?:cylinder|switch|key|tech|mechanic|card))", re.I), "Mazda"),
+]
+
 
 def _fix_words(text: str) -> str:
-    for pattern, word in _FIXES:
+    for pattern, word in _SHOP_FIXES + _FIXES:
         text = pattern.sub(word, text)
     return text.strip()
 

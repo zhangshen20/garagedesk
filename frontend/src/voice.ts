@@ -35,15 +35,21 @@ function element(): HTMLAudioElement {
   return audio;
 }
 
-/** Call inside a tap. Lets the page talk later; says nothing. */
-export function unlockSpeech() {
+/** iOS 17+ audio session. "playback" plays through the ringer switch like a voice
+ * memo, but it forbids the microphone: getUserMedia then fails with InvalidStateError
+ * (seen live on every iPhone press). Recording needs "play-and-record". */
+export function setAudioSession(type: "playback" | "play-and-record" | "auto") {
   try {
-    // play through the ringer switch like a voice memo, not like a notification
     const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
-    if (session) session.type = "playback";
+    if (session && session.type !== type) session.type = type;
   } catch {
     /* older browsers */
   }
+}
+
+/** Call inside a tap. Lets the page talk later; says nothing. */
+export function unlockSpeech(recordingNext = false) {
+  setAudioSession(recordingNext ? "play-and-record" : "playback");
   if (!unlocked) {
     try {
       const a = element();

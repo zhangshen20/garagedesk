@@ -27,7 +27,7 @@ from ..models import Booking, Channel, Job, Message
 from . import memory
 from .backoffice import OWNER_CONVERSATION_ID, handle_owner_message
 from .frontdesk import get_or_create_conversation
-from .jobcard import draft_from_text, readback
+from .jobcard import draft_from_extracted, extract, readback
 from .joblookup import describe, prepare_invoice, search_jobs, spoken_list
 
 INTENT_PROMPT = """You read what a mechanic shop owner just said into his phone (speech recognition, so expect odd spelling, missing words and regos spelled out like "A B C one two three"). Today is {today}.
@@ -264,7 +264,9 @@ def _handle(s: Session, text: str) -> dict[str, Any]:
     if r["intent"] == "job_card":
         words = amended or text
         ctx = memory.owner_context(s, words, for_extract=True)
-        out = {"kind": "draft", **draft_from_text(s, words, context=ctx).as_dict(), "transcript": text, "described": words}
+        ex, ex_model = extract(words, ctx)
+        ex = memory.ground_car(s, ex, words)
+        out = {"kind": "draft", **draft_from_extracted(s, ex, words, ex_model).as_dict(), "transcript": text, "described": words}
         out["model"] = " + ".join(m for m in (r["model"], out.get("model")) if m)
         remember(s, text, out["readback"], out["model"])
         return out

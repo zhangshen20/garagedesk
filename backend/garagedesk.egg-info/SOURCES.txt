@@ -7,11 +7,13 @@ app/llm.py
 app/main.py
 app/models.py
 app/seed.py
+app/seed_history.py
 app/services.py
 app/agent/__init__.py
 app/agent/backoffice.py
 app/agent/frontdesk.py
 app/agent/jobcard.py
+app/agent/joblookup.py
 app/agent/knowhow.py
 app/agent/memory.py
 app/agent/memory_tools.py
@@ -50,6 +52,8 @@ garagedesk.egg-info/requires.txt
 garagedesk.egg-info/top_level.txt
 tests/test_flows.py
 tests/test_jobcard_vision.py
+tests/test_memory.py
 tests/test_owner_app.py
+tests/test_owner_utterances.py
 tests/test_site_bookings.py
 tests/test_voice.py

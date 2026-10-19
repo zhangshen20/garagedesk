@@ -110,3 +110,20 @@ def test_send_before_priced_asks_then_takes_his_price(client):
     filt = [l for l in r["job"]["lines"] if l["description"] == "Oil filter"][0]
     assert filt["unit_cents"] == 2273  # $25.00 inc GST
     assert "oil filter 25.00" in r["readback"] and r["readback"].endswith("Send it?")
+
+
+def test_new_work_without_a_car_is_not_pinned_to_the_last_job(client):
+    from app.agent import memory
+    from app.db import session_scope
+
+    client.post("/api/owner/voice", json={"text": "Corolla ABC123 done, front pads, hour and a half labour"})
+    took = {"car": "Maria's Corolla", "rego": "ABC123", "customer_name": "Maria Nguyen", "total_dollars": 350}
+    with session_scope() as s:
+        # the model borrowed the Corolla from memory, but he never named a car
+        assert memory.ground_car(s, took, "front pads, hour and a half, 350 all up")["car"] == ""
+        assert "The job he is on now" not in memory.owner_context(s, "front pads, 350 all up", for_extract=True)
+        # he named it, or pointed back at it: keep it
+        assert memory.ground_car(s, took, "the Corolla, 350 all up")["rego"] == "ABC123"
+        assert memory.ground_car(s, took, "make it 350 all up for that one")["rego"] == "ABC123"
+        assert memory.ground_car(s, took, "GLF222 front pads 350")["rego"] == "ABC123"
+        assert memory.ground_car(s, took, "oil change 10W40, 120 all up")["car"] == ""

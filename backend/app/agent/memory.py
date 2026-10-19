@@ -354,6 +354,28 @@ def route_context(s: Session) -> str:
     return f"Just before this he said \"{t.said[:160]}\" and you replied \"{t.outcome[:160]}\"."
 
 
+_BACK = re.compile(r"\b(it|that|this|same|again|she|he|her|his|him|they|them|their|one)\b", re.I)
+
+
+def refers_back(text: str) -> bool:
+    """"it", "that one", "same again": he means something already in the conversation."""
+    return bool(_BACK.search(text))
+
+
+def names_a_car(s: Session, text: str) -> bool:
+    """His words say which car or customer: a rego, a model or a name we know."""
+    return bool(mentioned(s, text) or knowhow.cars_in(text) or re.search(r"\b(?!\d+w\d+\b)(?=[a-z]*\d)(?=\d*[a-z])[a-z0-9]{5,7}\b", text, re.I))
+
+
+def ground_car(s: Session, ex: dict[str, Any], words: str) -> dict[str, Any]:
+    """New work with no car in his words ("front pads, hour and a half, 350 all up") is not
+    the job we talked about earlier unless he says "it" or "that one": drop the car the model
+    took from memory so we ask which car instead of billing the wrong customer."""
+    if not ex or names_a_car(s, words) or refers_back(words):
+        return ex
+    return {**ex, "car": "", "rego": "", "customer_name": ""}
+
+
 # --- the block every owner-facing prompt gets ---------------------------------------------
 
 
@@ -377,7 +399,8 @@ def owner_context(s: Session, text: str, *, for_extract: bool = False) -> str:
         parts.append("What he said to you lately, oldest first:\n" + "\n".join(rows))
 
     focus = focus_job(s)
-    if focus:
+    # for new work, the job he was on only matters if he points back at it
+    if focus and not (for_extract and not refers_back(text)):
         view = svc.job_view(s, focus)
         parts.append(
             f"The job he is on now (what \"it\" or \"that one\" mean): job {focus.id}, {view['customer']}'s {view['vehicle']}, "
@@ -386,7 +409,7 @@ def owner_context(s: Session, text: str, *, for_extract: bool = False) -> str:
         )
 
     cars = mentioned(s, text)
-    pronoun = re.search(r"\b(it|that|this|same|again|she|he|her|his|him|they|them|their|one)\b", text, re.I)
+    pronoun = refers_back(text)
     if not cars and pronoun and turns:
         # "and what's he driving" right after "how does Jack usually pay"
         cars = mentioned(s, f"{turns[-1].said} {turns[-1].outcome}", limit=1)

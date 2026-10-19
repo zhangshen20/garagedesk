@@ -403,9 +403,22 @@ def route_context(s: Session) -> str:
 _BACK = re.compile(r"\b(it|that|this|same|again|she|he|her|his|him|they|them|their|one)\b", re.I)
 
 
+_WRAP = re.compile(r"\nThen he (?:added|corrected it|gave the price):", re.I)
+
+
 def refers_back(text: str) -> bool:
-    """"it", "that one", "same again": he means something already in the conversation."""
-    return bool(_BACK.search(text))
+    """"it", "that one", "same again": he means something already in the conversation.
+    (Only his own words count, not the "Then he added:" joining a follow-up to them.)"""
+    return bool(_BACK.search(_WRAP.sub("\n", text)))
+
+
+def latest_car(s: Session, text: str) -> tuple[Customer, Vehicle | None] | None:
+    """The car he named most recently: in "...\nThen he added: the Corolla", the Corolla."""
+    for part in reversed(_WRAP.split(text)):
+        found = mentioned(s, part, limit=1)
+        if found:
+            return found[0]
+    return None
 
 
 def names_a_car(s: Session, text: str) -> bool:
@@ -417,7 +430,18 @@ def ground_car(s: Session, ex: dict[str, Any], words: str) -> dict[str, Any]:
     """New work with no car in his words ("front pads, hour and a half, 350 all up") is not
     the job we talked about earlier unless he says "it" or "that one": drop the car the model
     took from memory so we ask which car instead of billing the wrong customer."""
-    if not ex or names_a_car(s, words) or refers_back(words):
+    if not ex:
+        return ex
+    named = latest_car(s, words)
+    if named and named[1]:
+        # he said which car: that one, even if the model leaned on the job talked about before
+        c, v = named
+        rego = _compact(str(ex.get("rego") or ""))
+        said_rego = bool(rego) and rego in _compact(_WRAP.split(words)[-1])  # a rego he said wins
+        if not said_rego and _compact(v.rego) != rego:
+            return {**ex, "car": f"{v.make} {v.model}", "rego": v.rego, "customer_name": c.name}
+        return ex
+    if names_a_car(s, words) or refers_back(words):
         return ex
     return {**ex, "car": "", "rego": "", "customer_name": ""}
 

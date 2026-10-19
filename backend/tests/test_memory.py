@@ -151,3 +151,14 @@ def test_yes_still_sends_after_a_restart(client):
     offers.clear()  # what a redeploy does to the offer held in memory
     r = client.post("/api/owner/voice", json={"text": "yep"}).json()
     assert r.get("action") == "sent", r
+
+
+def test_the_car_he_names_wins_over_the_job_before(client):
+    from app.agent import memory
+    from app.db import session_scope
+
+    leaned = {"car": "Nissan X-Trail", "rego": "DW4521", "customer_name": "Dan Walker", "total_dollars": 350}
+    words = "front pads, hour and a half, 350 all up\nThen he added: the Corolla"
+    with session_scope() as s:
+        assert not memory.refers_back(words)  # the "he" is ours, not his
+        assert memory.ground_car(s, leaned, words)["rego"] == "ABC123"

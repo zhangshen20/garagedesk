@@ -228,3 +228,24 @@ def test_spoken_380_all_up_is_380(client):
     assert r["job"]["total_cents"] == 38000, r["readback"]
     r = client.post("/api/owner/voice", json={"text": "Corolla ABC123 done, front pads, hour and a half, 170 all up"}).json()
     assert r["job"]["total_cents"] == 17000, r["readback"]  # $170 used to come out a cent off
+
+
+def test_misheard_cars_are_put_back():
+    from app.agent.stt import _fix_cars, _fix_words
+
+    def fix(t, hint=""):
+        return _fix_words(_fix_cars(t, hint))
+
+    # seen from Parakeet: the make or model is misheard next to a word it got right
+    assert fix("Master CX5, Rotors and Labor,$280.") == "Mazda CX-5, Rotors and labour, $280."
+    assert fix("Nissan X-ray oil and filter. Send it to Jenny.") == "Nissan X-Trail oil and filter. Send it to Jenny."
+    assert fix("Nissan extrail oil and filter.") == "Nissan X-Trail oil and filter."
+    # plates said in pieces are joined
+    assert fix("Corolla ABC 123. Front pads") == "Corolla ABC123. Front pads"
+    assert fix("Mazda 1KR 9ZZ oil", "Cars in the workshop: Mazda CX-5 1KR9ZZ.") == "Mazda 1KR9ZZ oil"
+    assert fix("year 2012 and 350 all up") == "year 2012 and 350 all up"
+    # names and right words are left alone
+    assert fix("Maria's Corolla ABC123, front pads.") == "Maria's Corolla ABC123, front pads."
+    assert fix("Toyota Corolla year 2012, master cylinder.") == "Toyota Corolla year 2012, master cylinder."
+    # a car only this shop has comes from today's hint
+    assert fix("Skoda Octavio front pads", "Cars in the workshop: Skoda Octavia 2AB3CD.") == "Skoda Octavia front pads"

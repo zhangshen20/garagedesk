@@ -37,7 +37,7 @@ The owner agent has memory and know-how built in. Recent turns, the job he's on,
 
 The model never invents a price. Nemotron extracts what he said, his amounts become the charge, and plain code fills any gaps from the shop's labour rate and parts list. Saying a job again replaces its lines, so a correction is just saying it right.
 
-Token Factory has no speech models, so we run two small open models on the same Nebius VM. The phone records his voice in any browser and faster-whisper (base.en, int8 on the CPU) transcribes it, primed with the cars and regos in the shop today so "ABC123" comes out right. Replies are spoken by Kokoro, an 82M-parameter Apache-2.0 neural voice, first audio in about 0.6 seconds and cached after that. Phone calls use Twilio's speech recognition. Approve links are HMAC-signed, so his wife needs no account or password. A deterministic mock drives the same tools, so tests, CI and a keyless demo exercise the real agent loop.
+Token Factory has no speech models, so we run two small open models on the same Nebius VM. The phone records his voice in any browser and NVIDIA Parakeet TDT 0.6B v2 (int8 on the CPU, about 0.6 s a recording) transcribes it. It hears owners whose first language isn't English far better than the small Whisper we started with, and a misheard make, model or plate is put back from the cars in the shop today ("Master CX5" becomes "Mazda CX-5"). Replies are spoken by Kokoro, an 82M-parameter Apache-2.0 neural voice, first audio in about 0.6 seconds and cached after that. Phone calls use Twilio's speech recognition. Approve links are HMAC-signed, so his wife needs no account or password. A deterministic mock drives the same tools, so tests, CI and a keyless demo exercise the real agent loop.
 
 The design follows five rules written for this owner: speak, snap or tap, never type; works with dirty hands; read it back before it leaves; his wife stays in control from anywhere; it already knows the shop.
 
@@ -67,7 +67,7 @@ The bigger lesson was about the user. The most useful thing an AI agent can do f
 - WhatsApp voice notes as another way to talk to it, then a second shop.
 
 ## Built with
-python, fastapi, sqlmodel, react, typescript, tailwind, docker, nebius-token-factory, nebius-ai-cloud, nvidia-nemotron, faster-whisper, kokoro-tts, tavily, twilio
+python, fastapi, sqlmodel, react, typescript, tailwind, docker, nebius-token-factory, nebius-ai-cloud, nvidia-nemotron, nvidia-parakeet, faster-whisper, kokoro-tts, tavily, twilio
 
 ## Links
 - Repo: https://github.com/zhangshen20/garagedesk (MIT)

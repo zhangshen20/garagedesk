@@ -17,6 +17,7 @@ ENV TTS_MODEL_DIR=/models/kokoro
 COPY backend/pyproject.toml ./
 COPY backend/app ./app
 RUN pip install --no-cache-dir ".[stt,tts]" \
+ && python -c "import onnx_asr; onnx_asr.load_model('nemo-parakeet-tdt-0.6b-v2', quantization='int8')" \
  && python -c "from faster_whisper import WhisperModel; WhisperModel('base.en', device='cpu', compute_type='int8')"
 COPY --from=web /backend/static ./static
 RUN mkdir -p /data/files

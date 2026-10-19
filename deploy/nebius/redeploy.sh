@@ -3,6 +3,8 @@
 set -euo pipefail
 cd /opt/garagedesk/src
 git pull --ff-only origin main
+# bash keeps running the copy it started with; run the one just pulled instead
+[ -z "${GARAGEDESK_REEXEC:-}" ] && GARAGEDESK_REEXEC=1 exec bash "$0" "$@"
 docker compose up -d --build
 docker image prune -f >/dev/null
 # keep the VM following main from now on (self-update.sh, every 5 minutes)

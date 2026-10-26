@@ -67,7 +67,10 @@ class NebiusLLM:
         from openai import OpenAI
 
         s = get_settings()
-        self.client = OpenAI(api_key=s.nebius_api_key, base_url=s.nebius_base_url)
+        # a request now and then hangs for most of a minute at the provider; cut it off
+        # and ask again (a fresh request usually answers in a second or two) rather than
+        # leave him standing there. The SDK retries timeouts itself.
+        self.client = OpenAI(api_key=s.nebius_api_key, base_url=s.nebius_base_url, timeout=20.0, max_retries=2)
 
     def chat(
         self,
@@ -94,7 +97,9 @@ class NebiusLLM:
             # extraction jobs and returns an empty or truncated answer. Super without
             # reasoning fills the job card JSON in about a second instead of 4-7.
             kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
-        resp = self.client.chat.completions.create(**kwargs)
+        # the daily report on Ultra is long by design; reasoning on Super needs a little more room
+        wait = 180.0 if tier == "deep" else (12.0 if tier == "fast" or not think else 30.0)
+        resp = self.client.with_options(timeout=wait).chat.completions.create(**kwargs)
         choice = resp.choices[0].message
         calls: list[ToolCall] = []
         for tc in choice.tool_calls or []:
@@ -116,7 +121,7 @@ class NebiusLLM:
 
     def vision(self, prompt: str, image_b64: str, *, mime: str = "image/jpeg", max_tokens: int = 800) -> LLMReply:
         model = get_settings().model_vision
-        resp = self.client.chat.completions.create(
+        resp = self.client.with_options(timeout=60.0).chat.completions.create(
             model=model,
             temperature=0,
             max_tokens=max_tokens,

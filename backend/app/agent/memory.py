@@ -357,10 +357,12 @@ def car_story(s: Session, c: Customer, v: Vehicle | None, *, current_amounts: bo
         view = svc.job_view(s, j)
         now = f"  In the shop now: job {j.id} '{j.title}', {j.status.value.replace('_', ' ')}"
         lines.append(now + (f"; {_lines_said(view)}; total {_dollars(view['total_cents'])} inc GST." if current_amounts else "."))
-    for j in done[:HISTORY_VISITS]:
+    for i, j in enumerate(done[:HISTORY_VISITS]):
         view = svc.job_view(s, j)
         paid = "paid" if j.status == JobStatus.paid else "invoiced, not paid yet"
-        lines.append(f"  Visit {_visit_day(s, j)}: job {j.id} '{j.title}': {_lines_said(view)}; total {_dollars(view['total_cents'])} inc GST ({paid}).")
+        # newest first; naming the latest stops "same as last time" picking an older visit
+        label = "LAST TIME (latest visit)" if i == 0 else "Earlier visit"
+        lines.append(f"  {label} {_visit_day(s, j)}: job {j.id} '{j.title}': {_lines_said(view)}; total {_dollars(view['total_cents'])} inc GST ({paid}).")
     if len(done) >= 2:
         lines.append(f"  A regular: {len(done)} visits on file.")
     notes = [j.mechanic_notes.strip() for j in jobs if j.mechanic_notes and j.mechanic_notes.strip()]

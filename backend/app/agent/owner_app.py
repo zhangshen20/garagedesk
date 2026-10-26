@@ -130,6 +130,9 @@ def route(text: str, context: list[dict[str, str]] | None = None) -> dict[str, A
         when = ""
     # what he plainly said beats the model's guess
     status = _status_from(text) or str(out.get("status") or "").strip()
+    # "who owes me money" right after "what's on today" means everyone who owes, not today's
+    if when and _status_from(text) and not _said(when, text, None):
+        when = ""
     return {
         "intent": intent,
         "when": when,

@@ -94,3 +94,18 @@ def test_a_total_covers_a_part_with_no_price(client):
         assert view["total_cents"] == 26000
         assert all(l["unit_cents"] > 0 for l in view["lines"])
         assert "oxygen sensor supplied" in view["lines"][0]["description"]
+
+
+def test_who_owes_me_is_not_limited_to_a_day_said_earlier(monkeypatch):
+    from app.agent import owner_app
+    from app.llm import LLMReply
+
+    class Fake:
+        def chat(self, *a, **k):
+            return LLMReply(content='{"intent": "find", "when": "today", "status": "unpaid"}', model="fake")
+
+    monkeypatch.setattr(owner_app, "get_llm", lambda: Fake())
+    before = [{"role": "user", "content": "What have I got on today?"}, {"role": "assistant", "content": "5 cars today."}]
+    r = owner_app.route("Who owes me money?", before)
+    assert r["status"] == "unpaid" and r["when"] == ""
+    assert owner_app.route("Who owes me money from today?", before)["when"] == "today"

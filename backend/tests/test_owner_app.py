@@ -285,3 +285,16 @@ def test_app_page_never_serves_files_outside_the_build(tmp_path):
     assert static_file("../secret.env", root) is None
     assert static_file("/etc/passwd", root) is None
     assert static_file("", root) is None
+
+
+def test_paid_car_back_again_gets_a_new_job(client):
+    say = lambda t: client.post("/api/owner/voice", json={"text": t}).json()  # noqa: E731
+    first = say("Corolla ABC123 done. Front pads, hour and a half labour")
+    assert client.post(f"/api/owner/jobs/{first['job']['job_id']}/send").status_code == 200
+    aid, t = _approval_link(client)
+    client.post(f"/api/approve/{aid}", json={"t": t, "approve": True})
+    assert client.post(f"/api/owner/jobs/{first['job']['job_id']}/paid", json={"method": "eftpos"}).status_code == 200
+    again = say("Corolla ABC123, replaced the wiper blades, half an hour")
+    assert again["kind"] == "draft" and again["job"], again
+    assert again["job"]["job_id"] != first["job"]["job_id"] and again["job"]["rego"] == "ABC123"
+    assert "Maria" in again["job"]["customer"]

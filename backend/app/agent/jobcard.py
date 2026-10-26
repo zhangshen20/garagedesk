@@ -23,7 +23,7 @@ from sqlmodel import Session, select
 from .. import services as svc
 from ..config import get_settings
 from ..llm import get_llm
-from ..models import Booking, BookingStatus, Job, JobLine, JobStatus, LineKind, Part
+from ..models import Booking, BookingStatus, Job, JobLine, JobStatus, LineKind, Part, Vehicle
 
 EXTRACT_PROMPT = """You turn what a mechanic says about a finished job into a job card, the way he would tell his wife over the phone so she can make the tax invoice. The notes are in Australian workshop slang and may come from speech recognition, so expect odd spelling ("break pads" = brake pads, "five W thirty" = 5W-30, "hour and a half" = 1.5 hours).
 Reply with JSON only:
@@ -195,6 +195,14 @@ def find_or_open_job(s: Session, ex: dict[str, Any], *, open_new: bool = True) -
     job = _job_from_todays_booking(s, hint, rego)
     if job:
         return job
+    known = s.exec(select(Vehicle).where(Vehicle.rego == rego.upper().replace(" ", ""))).first() if rego else None
+    if known and known.customer_id:
+        # a car we've seen before, back again after its last job was paid: new job, same owner
+        j = Job(customer_id=known.customer_id, vehicle_id=known.id, title=str(ex.get("labour_description") or "Workshop job"), status=JobStatus.in_progress)
+        s.add(j)
+        s.flush()
+        svc.log_event(s, "owner", "job_opened", f"returning car {rego}", "job", j.id)
+        return j
     if rego and ex.get("customer_name"):
         # a walk-in nobody booked: new customer, car and job
         c, v = svc.find_or_create_customer(s, name=str(ex["customer_name"]), phone="", rego=rego, vehicle=_vehicle_words(str(ex.get("car") or ""), str(ex["customer_name"]), rego))
@@ -479,7 +487,10 @@ def _not_found(s: Session, ex: dict[str, Any]) -> str:
     """Say what we looked for and offer the nearest jobs, never a flat "not found"."""
     from .joblookup import describe, search_jobs
 
-    car = " ".join(str(ex.get(k) or "") for k in ("car", "rego")).strip()
+    car = str(ex.get("car") or "").strip()
+    rego = str(ex.get("rego") or "").strip()
+    if rego and rego.lower() not in car.lower():
+        car = f"{car} {rego}".strip()
     found = search_jobs(s, car=car, customer=str(ex.get("customer_name") or ""), status="open")
     near = [j for j in found.get("nearest", []) if j["status"] not in ("invoiced", "paid")]
     what = car or str(ex.get("customer_name") or "") or "which car it was"

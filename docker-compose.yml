@@ -8,6 +8,8 @@ services:
     environment:
       DATABASE_URL: sqlite:////data/garagedesk.db
       FILES_DIR: /data/files
+      # the demo's wife, as in the README and the video; a real shop sets its own in .env
+      APPROVER_NAME: ${APPROVER_NAME:-Jenny}
     volumes:
       - garagedesk-data:/data
     restart: unless-stopped

@@ -85,8 +85,10 @@ def _item(line: dict[str, Any]) -> str:
         h = float(m.group(1)) if m else float(line["qty"])
         return f"{hours(h)} labour"
     name = desc.split(" - ")[0].split("(")[0].strip().lower()
+    # part codes ("Battery N70ZZ") are noise read aloud; "5w-30" stays
+    w = [x for x in name.split() if not (re.search(r"[a-z]", x) and re.search(r"\d", x) and "-" not in x)] or name.split()
+    name = " ".join(w)
     # catalogue names read backwards ("brake pads front"); say it the shop way
-    w = name.split()
     if len(w) > 1 and w[-1] in _SIDES:
         name = " ".join([w[-1], *w[:-1]])
     return name

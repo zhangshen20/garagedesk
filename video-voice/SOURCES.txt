@@ -1,0 +1,24 @@
+Voice reference sources (used only as zero-shot conditioning audio for Chatterbox TTS)
+
+OWNER voice reference: refs/owner_gwd.wav (19.6 s, 24 kHz mono)
+  Source:   LibriVox "Dialect and Accent Collection Vol. 1", track 15,
+            "The North Wind and the Sun" (attributed to Aesop),
+            read by Graham Dunlop (LibriVox reader "GWD") in an Australian accent.
+  URL:      https://archive.org/details/dialect_accent_0909_librivox
+  File:     https://archive.org/download/dialect_accent_0909_librivox/dialectaccent_vol_01_15gwd.mp3
+  Licence:  Public domain (LibriVox; archive.org licenseurl http://creativecommons.org/licenses/publicdomain/;
+            the recording itself states "This recording is in the public domain").
+  Excerpt:  13.2 s - 32.8 s of the track (story text only, no LibriVox intro), loudness-normalised.
+
+Also tried (not used in final): refs/owner_tf.wav, same collection, track 24, read by Timothy Ferguson
+  ("cultivated Australian accent"), public domain, 14.4 s - 31.5 s. One take of each owner line was
+  generated with it (in raw_tf/, final_tf/); not used because a cultivated accent suits a mechanic less.
+
+Checked but not usable: EdAcc (edinburghcstr/edacc, CC BY-SA 4.0) - no Australian-accent speakers
+  in either the validation or test split.
+
+NARRATOR voice: Chatterbox's built-in default voice (conds.pt shipped with ResembleAI/chatterbox, MIT).
+
+TTS model: Resemble AI Chatterbox (chatterbox-tts 0.1.7, ResembleAI/chatterbox on Hugging Face), MIT licence.
+  Outputs carry Resemble's imperceptible Perth watermark (built into the library).
+ASR used for listen-checking: OpenAI Whisper large-v3-turbo (MIT) via mlx-whisper.

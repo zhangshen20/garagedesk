@@ -30,6 +30,8 @@ Success is one number: admin calls to his wife per day, from several to none.
 
 ### For the owner: `/owner`, a phone web app on his home screen
 
+<p align="center"><img src="docs/screenshots/owner-draft.png" width="280" alt="Owner app: the spoken invoice draft"> <img src="docs/screenshots/wife-approve.png" width="280" alt="Approve page on his wife's phone"></p>
+
 One huge talk button: hold it and talk, let go to send (a tap to start and a tap to stop works too). The phone records his voice and the server turns it into text, so it works in Chrome, Safari or any phone browser. Replies come back in a natural voice, short by default, and end with the next question so a "yep" does it. No login, no forms, no app store.
 
 | He does | GarageDesk does |
@@ -43,7 +45,9 @@ One huge talk button: hold it and talk, let go to send (a tap to start and a tap
 | Taps "Add parts from a receipt photo" on the draft and photographs the supplier's receipt | A vision model on Token Factory (MiniCPM-V 4.5) reads it, adds each part to the job at cost, books the receipt as a parts expense with its GST, and reads back the new total |
 | Says *"The CX-5 is waiting on parts till Thursday"* | Texts that customer, so fewer people walk in to ask |
 | Hears *"Jenny approved Maria's Corolla… Say yes when they've paid on EFTPOS"* and says "yes", taps Paid EFTPOS, or says *"Corolla paid on EFTPOS"* | Marks the invoice paid with the method and texts the receipt |
-| Says *"need front pads for the Mazda"* | Finds the price (shop catalogue plus Tavily live search) and drafts a parts order that waits for approval |
+| Says *"order front pads for the Kia Cerato"* | Finds the part and a price (shop catalogue plus Tavily live search; with no price found, the usual supplier prices it on their invoice), reads the order back, *"…Send the order?"*, and "yes" sends it |
+| Asks *"what have I got on today?"*, *"how many cars tomorrow?"*, *"what did we take yesterday?"*, *"how much GST this quarter?"* | Answers from the diary and the books: *"5 cars today: 8am Maria's Corolla…"* |
+| Says *"the CX-5 is done"* | Tells the customer and offers the invoice for that job |
 
 The model never invents a price. The amounts he says are the charge; anything he leaves out comes from the shop's labour rate and parts list, and the read-back lets him correct it by just saying it again.
 
@@ -75,7 +79,8 @@ Bookings made on the shop's website flow onto the board, and a job opens prefill
 | Paid on EFTPOS with receipt text | Built |
 | Prefill jobs from the shop's booking website | Built (mock bookings until the site exposes its read endpoint) |
 | Phone, SMS and web chat front desk; parts lookup and orders; daily report | Built |
-| Quarterly GST summary for the BAS, CSV export | Next |
+| Diary, takings and quarterly GST answered by voice | Built |
+| CSV export for the accountant, real SMS through Twilio | Next |
 
 ### Nemotron tiers, each where it earns its keep
 
@@ -89,7 +94,7 @@ All model calls go through Token Factory's OpenAI-compatible endpoint (`https://
 
 ### Safety rails that make it usable for a real business
 
-- **A person approves anything that leaves the shop.** Invoices wait for his wife's tap; supplier orders wait for an approval. The owner hears every total read back first.
+- **A person approves anything that leaves the shop.** Invoices wait for his wife's tap; supplier orders are read back and go only when he says yes. The owner hears every total read back first.
 - **The agent never invents a price.** Prices come from the shop's catalogue and labour rate, or from a live supplier search; quotes for new work are the owner's call.
 - **Every outbound message is logged** in an outbox. Without Twilio credentials the outbox *is* the delivery, so the whole product demos offline.
 - **Transcripts persist per phone number**, so a customer texting back an hour later continues the same conversation.

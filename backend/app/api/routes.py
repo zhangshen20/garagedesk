@@ -309,15 +309,16 @@ class ApproveIn(BaseModel):
 @router.post("/approve/{approval_id}")
 def approve_decide(approval_id: int, body: ApproveIn, s: Session = Depends(get_session)) -> dict[str, Any]:
     a = _checked_approval(s, approval_id, body.t)
+    shop = {"shop": get_settings().shop_trading_name}
     if a.status != ApprovalStatus.pending:
-        return _approval_view(a)
+        return {**_approval_view(a), **shop}
     r = svc.decide_approval(s, a, body.approve, note=body.note, actor="approver")
     s.commit()
     if a.kind == "invoice" and a.ref_id:
         from ..voice.flow import after_approval
 
         after_approval(s, s.get(Job, a.ref_id), body.approve, body.note)
-    return {**_approval_view(a), **r}
+    return {**_approval_view(a), **r, **shop}
 
 
 # --- demo ----------------------------------------------------------------------------

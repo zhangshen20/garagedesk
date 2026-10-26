@@ -100,3 +100,14 @@ def test_server_voice_off_means_browser_voice(client, monkeypatch):
     get_settings.cache_clear()
     assert client.get("/api/tts", params={"t": "Hello."}).status_code == 503
     assert client.get("/api/owner/today").json()["tts"] is False
+
+
+def test_draft_say_leaves_out_part_codes():
+    view = {"customer": "Liam O'Connor", "vehicle": "Ford Ranger XYZ789", "total_cents": 36600, "lines": [
+        {"kind": "part", "description": "Battery N70ZZ", "qty": 1, "unit_cents": 27273},
+        {"kind": "part", "description": "Engine oil 5W-30 (5L)", "qty": 1, "unit_cents": 7500},
+        {"kind": "labour", "description": "Labour (0.5 hrs)", "qty": 0.5, "unit_cents": 12000},
+    ]}
+    said = spoken.draft_say(view, [])
+    assert "n70zz" not in said.lower()
+    assert said.startswith("Liam's Ranger. Battery, engine oil 5w-30 and half an hour labour.")

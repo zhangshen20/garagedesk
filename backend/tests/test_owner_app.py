@@ -272,3 +272,16 @@ def test_accented_shop_words_are_put_back():
     assert fix_heard("Text the customer, he'll pay later.", hint) == "Text the customer, he'll pay later."
     assert fix_heard("Replaced the brake master cylinder.", hint) == "Replaced the brake master cylinder."
     assert fix_heard("Regal blue Corolla, the rego is ABC123.", hint) == "Regal blue Corolla, the rego is ABC123."
+
+
+def test_app_page_never_serves_files_outside_the_build(tmp_path):
+    from app.main import static_file
+
+    (tmp_path / "static").mkdir()
+    (tmp_path / "static" / "manifest.webmanifest").write_text("{}")
+    (tmp_path / "secret.env").write_text("KEY=1")
+    root = str(tmp_path / "static")
+    assert static_file("manifest.webmanifest", root)
+    assert static_file("../secret.env", root) is None
+    assert static_file("/etc/passwd", root) is None
+    assert static_file("", root) is None

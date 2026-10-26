@@ -111,3 +111,11 @@ def test_draft_say_leaves_out_part_codes():
     said = spoken.draft_say(view, [])
     assert "n70zz" not in said.lower()
     assert said.startswith("Liam's Ranger. Battery, engine oil 5w-30 and half an hour labour.")
+
+
+def test_model_punctuation_comes_out_plain():
+    from app.voice.flow import with_voice
+
+    r = with_voice({"kind": "reply", "readback": "Labour – rear pads. Part – pads for the X‑Trail. Maria’s car."})
+    assert "X-Trail" in r["readback"] and "Maria's" in r["readback"]
+    assert "–" not in r["say"]

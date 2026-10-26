@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -94,15 +94,22 @@ def healthz() -> dict[str, str]:
     return {"status": "ok", "llm": get_settings().effective_llm_mode}
 
 
+def static_file(full_path: str, root: str = STATIC_DIR) -> str | None:
+    """The built file this address names, or None. ../ (even escaped) never leaves the
+    built pages, so nothing else on the server can be read through the app page."""
+    root = os.path.realpath(root)
+    candidate = os.path.realpath(os.path.join(root, full_path))
+    return candidate if full_path and candidate.startswith(root + os.sep) and os.path.isfile(candidate) else None
+
+
 if os.path.isdir(STATIC_DIR):
     app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
 
     @app.get("/{full_path:path}")
     def spa(full_path: str) -> FileResponse:
-        candidate = os.path.join(STATIC_DIR, full_path)
+        if full_path.startswith("api/"):
+            raise HTTPException(404)  # a wrong API address is an error, not the app page
         # hashed bundles live under /assets; everything else must be re-checked so
         # a phone never keeps an old page after a deploy
         no_cache = {"Cache-Control": "no-cache"}
-        if full_path and os.path.isfile(candidate):
-            return FileResponse(candidate, headers=no_cache)
-        return FileResponse(os.path.join(STATIC_DIR, "index.html"), headers=no_cache)
+        return FileResponse(static_file(full_path) or os.path.join(STATIC_DIR, "index.html"), headers=no_cache)

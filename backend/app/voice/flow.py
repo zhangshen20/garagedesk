@@ -13,10 +13,19 @@ from ..agent import memory
 from ..models import Approval, ApprovalStatus, Invoice, InvoiceStatus, Job
 from . import offers, spoken, tts
 
+# the models write X\u2011Trail and Maria\u2019s; the screen, the checks and the voice want plain text
+_PLAIN = str.maketrans({"\u2010": "-", "\u2011": "-", "\u2019": "'", "\u2018": "'", "\u201c": '"', "\u201d": '"', "\u00a0": " ", "\u202f": " "})
+
+
+def plain_text(t: str) -> str:
+    return t.translate(_PLAIN)
+
 
 def with_voice(r: dict[str, Any]) -> dict[str, Any]:
     """Add `say` (what is spoken) and `offer` (the next step) to an owner-app result,
     and start making the audio before the phone asks for it."""
+    if r.get("readback"):
+        r["readback"] = plain_text(r["readback"])
     job = r.get("job")
     if r.get("kind") == "draft" and r.get("ok") and job:
         warnings = r.get("warnings") or []
@@ -30,6 +39,7 @@ def with_voice(r: dict[str, Any]) -> dict[str, Any]:
         # agent answers can run long on screen; out loud, the first two sentences
         # invoice numbers stay on screen; out loud they're noise
         heard = re.sub(r"\s*\(INV-[\d-]+\)", "", r.get("readback") or "")
+        heard = re.sub(r"\s+[\u2013\u2014]\s+", ", ", heard)  # a dash read aloud is a pause
         r.setdefault("say", "\n".join(spoken.sentences(spoken.say_money(heard))[:2]))
         r.setdefault("offer", offers.current())
     r["say_full"] = spoken.say_money(r.get("readback") or "")

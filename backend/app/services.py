@@ -243,7 +243,7 @@ def create_booking(s: Session, *, customer: Customer, vehicle: Vehicle | None, d
 
 
 def booking_reference(b: Booking) -> str:
-    return f"SAC-{b.id:04d}"
+    return f"SNM-{b.id:04d}"
 
 
 def booking_view(s: Session, b: Booking) -> dict[str, Any]:

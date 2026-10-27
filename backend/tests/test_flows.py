@@ -16,7 +16,7 @@ def test_customer_books_over_web_chat(client):
     r = client.post("/api/chat/customer", json={"text": "Hi it's Ben Hall, Toyota Camry rego BHX442, needs a logbook service", "session_id": "web-t1"}).json()
     tools = [s["tool"] for s in r["steps"]]
     assert tools == ["find_or_create_customer", "list_availability", "create_booking"]
-    assert "SAC-" in r["reply"]
+    assert "SNM-" in r["reply"]
     bk = client.get("/api/bookings", params={"day": "tomorrow", "days": 3}).json()["bookings"]
     assert any(b["customer"] == "Ben Hall" and "BHX442" in b["vehicle"] for b in bk)
     # transcript persisted

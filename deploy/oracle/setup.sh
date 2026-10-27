@@ -82,7 +82,7 @@ compose up -d garagedesk
 if [ -n "$OTHER_BLOCK" ] && [ -f "$OTHER_SITE_DIR/docker-compose.ssl.yml" ]; then
   F="$OTHER_SITE_DIR/docker-compose.ssl.yml"
   [ -f "$F.before-garagedesk" ] || cp "$F" "$F.before-garagedesk"
-  sed -i -E 's/(["'"'"' -])80:80(["'"'"' ]|$)/\1127.0.0.1:8080:80\2/; s/(["'"'"' -])443:443(["'"'"' ]|$)/\1127.0.0.1:8443:443\2/' "$F"
+  sed -i -E 's/(["'"'"' -])(0\.0\.0\.0:)?80:80(["'"'"' ]|$)/\1127.0.0.1:8080:80\3/; s/(["'"'"' -])(0\.0\.0\.0:)?443:443(["'"'"' ]|$)/\1127.0.0.1:8443:443\3/' "$F"
   grep -q '127.0.0.1:8443:443' "$F" || { echo "could not move the other site's ports; left it as it was"; cp "$F.before-garagedesk" "$F"; exit 1; }
   (cd "$OTHER_SITE_DIR" && docker-compose -f docker-compose.yml -f docker-compose.ssl.yml up -d --no-deps nginx)
 fi

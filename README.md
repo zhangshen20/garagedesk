@@ -2,7 +2,7 @@
 
 **Replace the phone call to his wife.** A no-typing back office for a one-owner mechanic shop: he says what he would have told his wife on the phone, NVIDIA Nemotron on Nebius Token Factory turns it into a GST tax invoice, his wife approves it with one tap from wherever she is, and the customer gets a "your car is ready" text.
 
-Built for the Nebius x NVIDIA Global AI Hackathon (track: Best Apps & Agents) with a real workshop in Sunshine North, Melbourne. In the app the shop appears as **Sunshine Auto Care**.
+Built for the Nebius x NVIDIA Global AI Hackathon (track: Best Apps & Agents) with a real workshop, **Sunshine North Mechanic** in Sunshine North, Melbourne. The app runs under the shop's own name.
 
 > **Live demo:** owner app at https://garagedesk.shenit.com.au/owner (open it on a phone, in any browser), dashboard at https://garagedesk.shenit.com.au/ and customer chat at https://garagedesk.shenit.com.au/chat, calling live Nemotron models on Nebius Token Factory.
 >

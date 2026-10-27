@@ -1,4 +1,4 @@
-"""The read-only link to the shop's website bookings (the demo shop, Sunshine Auto Care)."""
+"""The read-only link to the shop's website bookings (the demo shop, Sunshine North Mechanic)."""
 
 import hashlib
 import hmac

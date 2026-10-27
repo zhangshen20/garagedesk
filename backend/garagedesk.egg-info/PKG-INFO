@@ -19,6 +19,7 @@ Requires-Dist: pytest>=8; extra == "dev"
 Requires-Dist: pytest-asyncio>=0.24; extra == "dev"
 Requires-Dist: ruff>=0.6; extra == "dev"
 Provides-Extra: stt
+Requires-Dist: onnx-asr[hub]>=0.7; extra == "stt"
 Requires-Dist: faster-whisper>=1.0; extra == "stt"
 Requires-Dist: av<16,>=11; extra == "stt"
 Provides-Extra: tts

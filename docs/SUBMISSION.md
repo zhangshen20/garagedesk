@@ -10,7 +10,7 @@ Paste-ready text for the Devpost form. Each heading below is one field or one se
 **Side prize:** Best Use of Tavily (live supplier price search at runtime, `backend/app/agent/parts_lookup.py`)
 
 ## Inspiration
-We built GarageDesk with a real workshop in Sunshine North, Melbourne. The owner is a very good mechanic. He doesn't type, he isn't comfortable with computers, and English is his second language. His day is spent under cars, telling his staff what to do, answering customers who walk in to ask if their car is ready, and ringing suppliers for parts. He has no job cards and no software: when a car is done he works out the charge on a calculator, and his customers pay on EFTPOS.
+We built GarageDesk with a real workshop, Sunshine North Mechanic in Melbourne. The owner is a very good mechanic. He doesn't type, he isn't comfortable with computers, and English is his second language. His day is spent under cars, telling his staff what to do, answering customers who walk in to ask if their car is ready, and ringing suppliers for parts. He has no job cards and no software: when a car is done he works out the charge on a calculator, and his customers pay on EFTPOS.
 
 His wife used to do the admin, including every GST tax invoice. Then she took a part-time job elsewhere. Now, whenever a car is finished, he phones her and tells her what was done, the parts, and how much to charge, and she makes the tax invoice. When she can't answer, the customer waits.
 

@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -63,6 +64,9 @@ async def lifespan(app: FastAPI):
 
         with session_scope() as s:
             seed_if_empty(s)
+    from .db import refresh_demo_if_stale
+
+    refresh_demo_if_stale()
     from .agent.stt import warm_up
 
     warm_up()
@@ -74,6 +78,8 @@ async def lifespan(app: FastAPI):
     scheduler = BackgroundScheduler(timezone=settings.shop_timezone)
     scheduler.add_job(_end_of_day_job, CronTrigger(hour=17, minute=45))
     scheduler.add_job(_reminders_job, CronTrigger(hour=16, minute=0))
+    if settings.demo_daily_reset:
+        scheduler.add_job(refresh_demo_if_stale, IntervalTrigger(minutes=5))
     if os.environ.get("GARAGEDESK_SCHEDULER", "1") == "1":
         scheduler.start()
     yield

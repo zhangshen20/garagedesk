@@ -1,3 +1,5 @@
+import logging
+import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 
@@ -7,6 +9,7 @@ from sqlmodel import Session, SQLModel, create_engine
 from .config import get_settings
 
 _engine = None
+log = logging.getLogger("garagedesk")
 
 
 def get_engine():
@@ -78,3 +81,41 @@ def reset_demo_data() -> None:
     with Session(engine) as s:
         seed(s)
         s.commit()
+    _mark_seeded()
+
+
+def _seed_marker() -> str:
+    from .config import get_settings
+
+    return os.path.join(get_settings().files_dir, "demo-seeded-on")
+
+
+def _mark_seeded() -> None:
+    from .services import today
+
+    os.makedirs(os.path.dirname(_seed_marker()), exist_ok=True)
+    with open(_seed_marker(), "w") as f:
+        f.write(today().isoformat())
+
+
+def refresh_demo_if_stale() -> bool:
+    """With DEMO_DAILY_RESET on, reseed when the demo data was made on an earlier day
+    (or nobody knows when). Runs at startup and every few minutes, so the demo is fresh
+    each morning with nobody pressing Reset."""
+    from .config import get_settings
+    from .services import today
+
+    if not get_settings().demo_daily_reset:
+        return False
+    try:
+        with open(_seed_marker()) as f:
+            if f.read().strip() == today().isoformat():
+                return False
+    except OSError:
+        pass
+    reset_demo_data()
+    from .voice import offers
+
+    offers.clear()
+    log.info("demo data was from an earlier day: reseeded for %s", today())
+    return True

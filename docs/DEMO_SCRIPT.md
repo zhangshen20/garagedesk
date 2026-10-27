@@ -2,14 +2,14 @@
 
 **Story:** one real moment. A car is finished, and today the owner would put down his calculator and ring his wife at her other job: "Corolla's done, front pads, hour and a half, 350 all up." She would make the tax invoice. In the video he says exactly the same words to his phone instead, and never touches a keyboard.
 
-Every scene runs on the live demo at https://66-201-4-40.sslip.io. Every line below was run against live Nemotron on 2026-10-26 and gave the read-back shown.
+Every scene runs on the live demo at https://garagedesk.shenit.com.au. Every line below was run against live Nemotron on 2026-10-26 and gave the read-back shown.
 
 ## Setup (10 minutes, once)
 
-- **Owner phone:** an iPhone with https://66-201-4-40.sslip.io/owner open (Chrome or Safari). Allow the microphone the first time. Ringer volume up so the read-back is heard. Record with the iPhone's screen recording (Control Centre, with the microphone on so his voice and the read-back are in the recording).
+- **Owner phone:** an iPhone with https://garagedesk.shenit.com.au/owner open (Chrome or Safari). Allow the microphone the first time. Ringer volume up so the read-back is heard. Record with the iPhone's screen recording (Control Centre, with the microphone on so his voice and the read-back are in the recording).
 - **Wife's phone:** any second phone, or a laptop window at phone size. The approve link appears on the dashboard's **Outbox** page (it is a text once Twilio is on); open it from there.
 - **Customer's phone:** the same Outbox page shows the customer's texts.
-- **Before each take:** on a laptop open https://66-201-4-40.sslip.io/, press **Reset demo data** at the bottom of the sidebar, then press **Generate** on the Report page. Say the first line once as a warm-up, then reset again.
+- **Before each take:** on a laptop open https://garagedesk.shenit.com.au/, press **Reset demo data** at the bottom of the sidebar, then press **Generate** on the Report page. Say the first line once as a warm-up, then reset again.
 - **Pauses:** after he lets go, the reply comes back in 2-4 seconds. Keep the camera on the phone and talk over it; don't cut.
 - **No faces or real number plates** are needed. A calculator on the bench helps the first shot.
 

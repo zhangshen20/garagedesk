@@ -30,7 +30,7 @@ The owner opens GarageDesk on his iPhone, holds one big button, says what he wan
 - **The rest of the front desk:** an agent answering phone calls, SMS and web chat (hours, bookings into a free bay, "is my car ready?", messages for the owner), bookings from the shop's own website prefilling jobs, reminder texts, and an end-of-day report. Phone and SMS run through Twilio when its keys are set; the public demo has none, so every text it sends shows on the dashboard's Sent page instead of reaching a real phone.
 
 ## How we built it
-FastAPI and SQLModel on the backend, a React and Tailwind phone web app for the owner (added to his home screen, no app store) and a dashboard for his wife and the accountant, all in one Docker image on a Nebius AI Cloud VM. Every language model call goes to **Nebius Token Factory** through its OpenAI-compatible API with native function calling, and each **NVIDIA Nemotron 3** tier does the job it is best at:
+FastAPI and SQLModel on the backend, a React and Tailwind phone web app for the owner (added to his home screen, no app store) and a dashboard for his wife and the accountant, all in one Docker image (built and run on a Nebius AI Cloud VM; the live demo now runs on a free ARM VM). Every language model call goes to **Nebius Token Factory** through its OpenAI-compatible API with native function calling, and each **NVIDIA Nemotron 3** tier does the job it is best at:
 
 - **Nemotron 3 Nano** routes every message (a finished job, a correction, a question, an order, a payment?) and pulls the day, car, customer, rego or status out of how he talks. Fast and called constantly.
 - **Nemotron 3 Super** turns a mechanic's loose speech ("pads", "5W-30", "hour and a half") into exact invoice lines, and runs the tool-calling front desk and back office agents.
@@ -38,7 +38,7 @@ FastAPI and SQLModel on the backend, a React and Tailwind phone web app for the 
 - **MiniCPM-V 4.5** on Token Factory reads supplier receipt photos, and Super turns what it read into parts lines.
 - **Tavily** searches live supplier prices for parts the shop doesn't stock, and Nano turns the results into structured prices.
 
-Token Factory has no speech models, so two small open models run on the same Nebius VM's CPU. **NVIDIA Parakeet TDT 0.6B v2** (int8 ONNX, about 0.6 s a recording) transcribes the phone's recording, so it works in Chrome, Safari or any browser, and a misheard make, model or plate is put back from the cars in the shop that day. **Kokoro 82M** speaks the replies.
+Token Factory has no speech models, so two small open models run on the server's CPU. **NVIDIA Parakeet TDT 0.6B v2** (int8 ONNX, about 0.2 to 0.6 s a recording) transcribes the phone's recording, so it works in Chrome, Safari or any browser, and a misheard make, model or plate is put back from the cars in the shop that day. **Kokoro 82M** speaks the replies.
 
 The agent has memory and know-how built in: recent turns, the job he's on, and the shop's records for any car he names (bookings, past visits and what they cost, his notes, facts he asked it to remember) go into each call, along with a mechanic's knowledge base of common jobs, typical times and misheard car names. The model never sets a price: Nemotron extracts what he said, his amounts become the charge, and plain code fills any gaps from the labour rate and parts list, exact to the cent. Approve links are HMAC-signed so his wife needs no account. A deterministic mock drives the same tools, so CI and a keyless demo exercise the real agent loop.
 
@@ -71,9 +71,9 @@ The bigger lesson was about the user. The most useful thing an AI agent can do f
 python, fastapi, sqlmodel, react, typescript, tailwind, docker, caddy, nebius-token-factory, nebius-ai-cloud, nvidia-nemotron, nvidia-parakeet, onnx, minicpm-v, kokoro-tts, tavily, twilio
 
 ## Try it out
-- Owner app (open on a phone, any browser): https://66-201-4-40.sslip.io/owner
-- Dashboard: https://66-201-4-40.sslip.io/
-- Customer chat: https://66-201-4-40.sslip.io/chat
+- Owner app (open on a phone, any browser): https://garagedesk.shenit.com.au/owner
+- Dashboard: https://garagedesk.shenit.com.au/
+- Customer chat: https://garagedesk.shenit.com.au/chat
 - Code (MIT): https://github.com/zhangshen20/garagedesk
 
 ## Video
@@ -86,7 +86,7 @@ Token Factory's OpenAI-compatible API meant zero SDK friction: the standard `ope
 
 What cost us time: exact Nemotron model ids are hard to find in the docs (one id in a code sample, the rest in URL-encoded catalogue links with inconsistent casing), and reasoning tokens silently share the `max_tokens` budget, which gave us truncated JSON and a cut-off report until we turned thinking off per request (`chat_template_kwargs: {"enable_thinking": false}`). A docs note on both would save every team an hour.
 
-The biggest gap for us: Token Factory has no speech-to-text or text-to-speech model. Our user doesn't type, so we host NVIDIA Parakeet and Kokoro ourselves on a Nebius VM. Parakeet was a big win for accented English (word errors 18.9% to 8.4%), and a hosted Parakeet endpoint next to Nemotron would let a voice-first app keep the whole pipeline on one key.
+The biggest gap for us: Token Factory has no speech-to-text or text-to-speech model. Our user doesn't type, so we host NVIDIA Parakeet and Kokoro ourselves on the server. Parakeet was a big win for accented English (word errors 18.9% to 8.4%), and a hosted Parakeet endpoint next to Nemotron would let a voice-first app keep the whole pipeline on one key.
 
 ## Was this project started before the hackathon?
 No. GarageDesk was started on 11 October 2026, during the hackathon, in a new public repository.

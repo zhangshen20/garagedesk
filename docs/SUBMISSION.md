@@ -30,7 +30,7 @@ The owner opens GarageDesk on his iPhone, holds one big button, says what he wan
 - **The rest of the front desk:** an agent answering phone calls, SMS and web chat (hours, bookings into a free bay, "is my car ready?", messages for the owner), bookings from the shop's own website prefilling jobs, reminder texts, and an end-of-day report. Phone and SMS run through Twilio when its keys are set; the public demo has none, so every text it sends shows on the dashboard's Sent page instead of reaching a real phone.
 
 ## How we built it
-FastAPI and SQLModel on the backend, a React and Tailwind phone web app for the owner (added to his home screen, no app store) and a dashboard for his wife and the accountant, all in one Docker image (built and run on a Nebius AI Cloud VM; the live demo now runs on a free ARM VM). Every language model call goes to **Nebius Token Factory** through its OpenAI-compatible API with native function calling, and each **NVIDIA Nemotron 3** tier does the job it is best at:
+FastAPI and SQLModel on the backend, a React and Tailwind phone web app for the owner (added to his home screen, no app store) and a dashboard for his wife and the accountant, all in one Docker image (built and run on a Nebius AI Cloud VM; the live demo now runs on a free Oracle Cloud ARM VM; all AI runs on Nebius Token Factory). Every language model call goes to **Nebius Token Factory** through its OpenAI-compatible API with native function calling, and each **NVIDIA Nemotron 3** tier does the job it is best at:
 
 - **Nemotron 3 Nano** routes every message (a finished job, a correction, a question, an order, a payment?) and pulls the day, car, customer, rego or status out of how he talks. Fast and called constantly.
 - **Nemotron 3 Super** turns a mechanic's loose speech ("pads", "5W-30", "hour and a half") into exact invoice lines, and runs the tool-calling front desk and back office agents.
@@ -68,7 +68,7 @@ The bigger lesson was about the user. The most useful thing an AI agent can do f
 - A second shop.
 
 ## Built with
-python, fastapi, sqlmodel, react, typescript, tailwind, docker, caddy, nebius-token-factory, nebius-ai-cloud, nvidia-nemotron, nvidia-parakeet, onnx, minicpm-v, kokoro-tts, tavily, twilio
+python, fastapi, sqlmodel, react, typescript, tailwind, docker, caddy, nebius-token-factory, nebius-ai-cloud, oracle-cloud, nvidia-nemotron, nvidia-parakeet, onnx, minicpm-v, kokoro-tts, tavily, twilio
 
 ## Try it out
 - Owner app (open on a phone, any browser): https://garagedesk.shenit.com.au/owner

@@ -6,7 +6,7 @@ Built for the Nebius x NVIDIA Global AI Hackathon (track: Best Apps & Agents) wi
 
 > **Live demo:** owner app at https://garagedesk.shenit.com.au/owner (open it on a phone, in any browser), dashboard at https://garagedesk.shenit.com.au/ and customer chat at https://garagedesk.shenit.com.au/chat, calling live Nemotron models on Nebius Token Factory.
 >
-> **Demo video (2:51):** https://youtu.be/0Q1z12hNR8k
+> **Demo video (2:51):** https://youtu.be/WMow-UQDZK8
 >
 > Demo mode works with **no API keys at all**. Add a Nebius key and the same code runs on live Nemotron models.
 

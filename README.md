@@ -6,6 +6,8 @@ Built for the Nebius x NVIDIA Global AI Hackathon (track: Best Apps & Agents) wi
 
 > **Live demo:** owner app at https://66-201-4-40.sslip.io/owner (open it on a phone, in any browser), dashboard at https://66-201-4-40.sslip.io/ and customer chat at https://66-201-4-40.sslip.io/chat, on a Nebius AI Cloud VM calling live Nemotron models.
 >
+> **Demo video (2:51):** https://youtu.be/0Q1z12hNR8k
+>
 > Demo mode works with **no API keys at all**. Add a Nebius key and the same code runs on live Nemotron models.
 
 ## The owner this is for

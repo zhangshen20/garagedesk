@@ -77,7 +77,7 @@ python, fastapi, sqlmodel, react, typescript, tailwind, docker, caddy, nebius-to
 - Code (MIT): https://github.com/zhangshen20/garagedesk
 
 ## Video
-(YouTube link, to fill after recording from [DEMO_SCRIPT.md](DEMO_SCRIPT.md))
+https://youtu.be/0Q1z12hNR8k (2:51)
 
 ## Feedback on Nebius and NVIDIA tools
 The full write-up is [FEEDBACK.md](FEEDBACK.md). Short version for the form:

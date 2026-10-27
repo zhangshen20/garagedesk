@@ -12,6 +12,8 @@ services:
       # video, whatever .env says (the demo VM's .env was copied with "the office").
       # A real shop deletes this line and sets APPROVER_NAME in .env.
       APPROVER_NAME: Jenny
+      # fresh demo data each day (Melbourne time), with nobody pressing Reset
+      DEMO_DAILY_RESET: "1"
     volumes:
       - garagedesk-data:/data
     restart: unless-stopped

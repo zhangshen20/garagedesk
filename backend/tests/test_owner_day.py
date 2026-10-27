@@ -109,3 +109,22 @@ def test_who_owes_me_is_not_limited_to_a_day_said_earlier(monkeypatch):
     r = owner_app.route("Who owes me money?", before)
     assert r["status"] == "unpaid" and r["when"] == ""
     assert owner_app.route("Who owes me money from today?", before)["when"] == "today"
+
+
+def test_demo_data_is_fresh_every_day(client, monkeypatch, tmp_path):
+    from datetime import date
+
+    from app import db, services
+    from app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "files_dir", str(tmp_path))
+    assert not db.refresh_demo_if_stale()  # off unless the demo asks for it
+    monkeypatch.setattr(get_settings(), "demo_daily_reset", True)
+    assert db.refresh_demo_if_stale()  # nobody knows when it was seeded
+    assert not db.refresh_demo_if_stale()  # same day: left alone
+    client.post("/api/owner/voice", json={"text": "Corolla ABC123, front pads, hour and a half, 350 all up"})
+    monkeypatch.setattr(services, "today", lambda: date(2031, 1, 2))
+    assert db.refresh_demo_if_stale()  # next morning: reseeded for the new day
+    jobs = client.get("/api/jobs").json()
+    jobs = jobs.get("jobs", jobs) if isinstance(jobs, dict) else jobs
+    assert all(j["total_cents"] != 35000 for j in jobs if j["rego"] == "ABC123")  # his draft is gone

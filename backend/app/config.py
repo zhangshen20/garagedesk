@@ -70,6 +70,9 @@ class Settings(BaseSettings):
     # Lets anyone put the demo back to its clean recording state (POST /api/demo/reset).
     # Turn off for a real shop.
     demo_reset_enabled: bool = True
+    # the public demo: fresh demo data every day, so "today" and "yesterday" always
+    # mean something and one visitor's changes don't greet the next. Never on for a real shop.
+    demo_daily_reset: bool = False
 
     app_secret: str = "change-me"
     public_base_url: str = "http://localhost:8000"

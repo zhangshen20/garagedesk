@@ -528,7 +528,7 @@ def day_snapshot(s: Session, d: date) -> dict[str, Any]:
     """Everything the Ultra model needs to write the owner's end-of-day report."""
     bookings = s.exec(select(Booking).where(Booking.day == d)).all()
     tomorrow = s.exec(select(Booking).where(Booking.day == d + timedelta(days=1), Booking.status.in_([BookingStatus.confirmed, BookingStatus.requested]))).all()  # type: ignore[attr-defined]
-    start, end = datetime.combine(d, time.min), datetime.combine(d, time.max)
+    start, end = utc_bounds(d, d)
     payments = s.exec(select(Payment).where(Payment.paid_at >= start, Payment.paid_at <= end)).all()
     expenses = s.exec(select(Expense).where(Expense.day == d)).all()
     invoices = s.exec(select(Invoice).where(Invoice.issued_at >= start, Invoice.issued_at <= end)).all()

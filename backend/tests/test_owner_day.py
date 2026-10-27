@@ -128,3 +128,24 @@ def test_demo_data_is_fresh_every_day(client, monkeypatch, tmp_path):
     jobs = client.get("/api/jobs").json()
     jobs = jobs.get("jobs", jobs) if isinstance(jobs, dict) else jobs
     assert all(j["total_cents"] != 35000 for j in jobs if j["rego"] == "ABC123")  # his draft is gone
+
+
+def test_cash_in_today_uses_the_shops_day_not_utc(client):
+    """Timestamps are stored in UTC; a 9am payment in Melbourne is the previous UTC day."""
+    from datetime import datetime, time
+    from zoneinfo import ZoneInfo
+
+    from sqlmodel import Session, select
+
+    from app import db
+    from app import services as svc
+    from app.models import Invoice, Payment
+
+    d = svc.today()
+    morning = datetime.combine(d, time(9, 0), tzinfo=ZoneInfo("Australia/Melbourne")).astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+    with Session(db.get_engine()) as s:
+        inv = s.exec(select(Invoice)).first()
+        before = svc.day_snapshot(s, d)["cash_in_cents"]
+        s.add(Payment(invoice_id=inv.id, amount_cents=35000, method="eftpos", paid_at=morning))
+        s.commit()
+        assert svc.day_snapshot(s, d)["cash_in_cents"] == before + 35000

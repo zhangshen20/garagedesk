@@ -67,7 +67,7 @@ services:
     image: docker.io/library/caddy:2
     ports: ["80:80", "443:443"]
     volumes:
-      - $BASE/Caddyfile:/etc/caddy/Caddyfile:ro
+      - $BASE/Caddyfile:/etc/caddy/Caddyfile:ro,Z
       - caddy-data:/data
     networks: [default$( [ -n "$OTHER_BLOCK" ] && echo ", other")]
     restart: unless-stopped

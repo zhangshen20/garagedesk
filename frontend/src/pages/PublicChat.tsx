@@ -8,7 +8,7 @@ interface Turn {
   error?: boolean;
 }
 
-const GREETING = "Hi! I'm the front desk at Sunshine Auto Care. Book a service, check on your car, or ask about hours.";
+const GREETING = "Hi! I'm the front desk at Sunshine North Mechanic. Book a service, check on your car, or ask about hours.";
 const QUICK = ["Book a logbook service", "Do you do roadworthy certificates?", "What are your hours?", "Is my car ready?"];
 
 function sessionId(): string {
@@ -33,7 +33,7 @@ export default function PublicChat() {
   const scroller = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    document.title = "Sunshine Auto Care · Chat";
+    document.title = "Sunshine North Mechanic · Chat";
     api.overview().then((o) => setShop({ hours: o.shop.hours, address: o.shop.address })).catch(() => undefined);
   }, []);
 
@@ -66,7 +66,7 @@ export default function PublicChat() {
             <Car size={24} />
           </span>
           <div className="leading-tight">
-            <div className="font-semibold text-lg">Sunshine Auto Care</div>
+            <div className="font-semibold text-lg">Sunshine North Mechanic</div>
             <div className="text-xs text-slate-300">Sunshine North, Melbourne · Logbook servicing, repairs, roadworthy</div>
           </div>
         </div>

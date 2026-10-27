@@ -41,12 +41,12 @@ class Settings(BaseSettings):
     files_dir: str = "./files"
 
     # --- The shop ----------------------------------------------------------------------
-    shop_name: str = "Sunshine Auto Care"
-    shop_trading_name: str = "Sunshine Auto Care"
+    shop_name: str = "Sunshine North Mechanic"
+    shop_trading_name: str = "Sunshine North Mechanic"
     shop_abn: str = "12 345 678 901"
     shop_address: str = "Whitehill Ave, Sunshine North VIC 3020"
     shop_phone: str = "(03) 9000 0000"
-    shop_email: str = "desk@sunshineautocare.example"
+    shop_email: str = "desk@sunshinenorthmechanic.example"
     shop_hours: str = "Mon-Sat 8:00am-5:30pm"
     shop_timezone: str = "Australia/Melbourne"
     gst_rate: float = 0.10

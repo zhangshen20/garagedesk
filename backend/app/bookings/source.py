@@ -108,7 +108,7 @@ class HttpBookingSource:
 
 
 class MockBookingSource:
-    """A believable week at Sunshine Auto Care, relative to ``today``.
+    """A believable week at Sunshine North Mechanic, relative to ``today``.
 
     State is kept in memory so the demo can flip a booking to "completed" and
     watch the invoice draft appear, exactly as the real webhook would.

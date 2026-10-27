@@ -1,4 +1,4 @@
-"""Demo data for Sunshine Auto Care: a believable week in a three-bay workshop."""
+"""Demo data for Sunshine North Mechanic: a believable week in a three-bay workshop."""
 
 from __future__ import annotations
 
@@ -157,4 +157,4 @@ def seed(s: Session) -> None:
     ])
     s.flush()
     seed_history(s)  # the regulars' past visits, for the agent's memory (added last so ids above stay put)
-    svc.log_event(s, "system", "seeded", "Demo data for Sunshine Auto Care")
+    svc.log_event(s, "system", "seeded", "Demo data for Sunshine North Mechanic")

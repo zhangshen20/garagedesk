@@ -39,7 +39,7 @@ export default function Layout() {
           </span>
           <div className="leading-tight">
             <div className="font-semibold text-slate-900">GarageDesk</div>
-            <div className="text-[11px] text-slate-500 truncate max-w-[150px]">{ov?.shop.trading_name ?? "Sunshine Auto Care"}</div>
+            <div className="text-[11px] text-slate-500 truncate max-w-[150px]">{ov?.shop.trading_name ?? "Sunshine North Mechanic"}</div>
           </div>
         </div>
         <nav className="flex-1 px-2 space-y-0.5">
@@ -111,7 +111,7 @@ export default function Layout() {
         </span>
         <div className="leading-tight">
           <div className="font-semibold text-slate-900 text-sm">GarageDesk</div>
-          <div className="text-[11px] text-slate-500">{ov?.shop.trading_name ?? "Sunshine Auto Care"}</div>
+          <div className="text-[11px] text-slate-500">{ov?.shop.trading_name ?? "Sunshine North Mechanic"}</div>
         </div>
         {mock && <span className="ml-auto rounded-md bg-slate-100 text-slate-500 px-1.5 py-0.5 text-[10px] font-medium">demo</span>}
       </header>

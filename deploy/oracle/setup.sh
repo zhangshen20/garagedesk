@@ -20,7 +20,10 @@ OTHER_SITE_NGINX=${OTHER_SITE_NGINX:-nem-nginx}
 export DOCKER_HOST=${DOCKER_HOST:-unix:///run/user/$(id -u)/podman/podman.sock}
 
 IP=$(curl -fsS https://ifconfig.me || curl -fsS https://api.ipify.org)
-HOST="${IP//./-}.sslip.io"
+SSLIP="${IP//./-}.sslip.io"
+# GARAGEDESK_DOMAIN: your own name for the demo (an A record pointing at this VM); sslip.io keeps working too
+HOST=${GARAGEDESK_DOMAIN:-$SSLIP}
+SITE_NAMES=$HOST; [ "$HOST" = "$SSLIP" ] || SITE_NAMES="$HOST, $SSLIP"
 echo "public address $IP, demo will be https://$HOST"
 
 # 1. tools and disk: git for the checkout, and grow / into the rest of the boot volume
@@ -50,7 +53,7 @@ if [ -n "$OTHER_SITE_DOMAIN" ] && podman network exists "$OTHER_SITE_NETWORK" 2>
 }"
 fi
 cat > "$BASE/Caddyfile" <<CADDY
-$HOST {
+$SITE_NAMES {
   reverse_proxy garagedesk:8000
 }
 $OTHER_BLOCK
@@ -64,7 +67,7 @@ services:
     image: docker.io/library/caddy:2
     ports: ["80:80", "443:443"]
     volumes:
-      - $BASE/Caddyfile:/etc/caddy/Caddyfile:ro
+      - $BASE/Caddyfile:/etc/caddy/Caddyfile:ro,Z
       - caddy-data:/data
     networks: [default$( [ -n "$OTHER_BLOCK" ] && echo ", other")]
     restart: unless-stopped
@@ -133,8 +136,8 @@ systemctl --user enable --now garagedesk-update.timer >/dev/null
 echo "boot service and self-update timer on"
 
 for _ in $(seq 1 60); do
-  curl -sf "https://$HOST/healthz" >/dev/null && { echo "live: https://$HOST/owner"; exit 0; }
+  curl -sf "https://$SSLIP/healthz" >/dev/null && { echo "live: https://$HOST/owner (also https://$SSLIP)"; exit 0; }
   sleep 5
 done
-echo "https://$HOST/healthz did not answer yet; check: docker logs garagedesk-caddy-1 / garagedesk-garagedesk-1"
+echo "https://$SSLIP/healthz did not answer yet; check: docker logs garagedesk-caddy-1 / garagedesk-garagedesk-1"
 exit 1

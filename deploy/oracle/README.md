@@ -12,7 +12,7 @@ It copies the keys to `~/garagedesk/garagedesk.env` on the VM and runs `setup.sh
 
 - installs git and grows `/` into the unused part of the boot volume (`oci-growfs`);
 - clones the repo to `~/garagedesk/src` and builds the image with rootless Podman and docker-compose v2;
-- puts Caddy on ports 80/443 with a Let's Encrypt certificate for `<ip>.sslip.io`. If another site's nginx container already holds 80/443, it is moved to `127.0.0.1:8080/8443` and Caddy forwards that site's domain to it (its compose file is backed up as `*.before-garagedesk`);
+- puts Caddy on ports 80/443 with Let's Encrypt certificates for `GARAGEDESK_DOMAIN` (the live demo uses `garagedesk.shenit.com.au`, an A record to the VM) and `<ip>.sslip.io`. If another site's nginx container already holds 80/443, it is moved to `127.0.0.1:8080/8443` and Caddy forwards that site's domain to it (its compose file is backed up as `*.before-garagedesk`);
 - adds user systemd units: `garagedesk.service` (start on boot) and `garagedesk-update.timer` (follow `main` every 5 minutes, `self-update.sh`).
 
 Logs: `journalctl --user -u garagedesk-update`, `docker logs garagedesk-garagedesk-1`, `docker logs garagedesk-caddy-1`.

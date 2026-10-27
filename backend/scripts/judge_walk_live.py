@@ -3,7 +3,7 @@ script and README, through the same endpoints the phone and the dashboard use.
 Standard library only (Pillow optional, for the receipt photo), so it runs from any
 machine that can reach the demo.
 
-    python3 backend/scripts/judge_walk_live.py [https://66-201-4-40.sslip.io]
+    python3 backend/scripts/judge_walk_live.py [https://garagedesk.shenit.com.au]
 
 It resets the demo data first and again at the end, so the demo is left fresh.
 """
@@ -21,7 +21,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-BASE = (sys.argv[1] if len(sys.argv) > 1 else "https://66-201-4-40.sslip.io").rstrip("/")
+BASE = (sys.argv[1] if len(sys.argv) > 1 else "https://garagedesk.shenit.com.au").rstrip("/")
 CTX = ssl.create_default_context()  # a bad certificate fails here, as it would in a browser
 results: list[tuple[str, bool, str, float]] = []
 

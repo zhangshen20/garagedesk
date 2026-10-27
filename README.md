@@ -4,7 +4,7 @@
 
 Built for the Nebius x NVIDIA Global AI Hackathon (track: Best Apps & Agents) with a real workshop in Sunshine North, Melbourne. In the app the shop appears as **Sunshine Auto Care**.
 
-> **Live demo:** owner app at https://66-201-4-40.sslip.io/owner (open it on a phone, in any browser), dashboard at https://66-201-4-40.sslip.io/ and customer chat at https://66-201-4-40.sslip.io/chat, on a Nebius AI Cloud VM calling live Nemotron models.
+> **Live demo:** owner app at https://garagedesk.shenit.com.au/owner (open it on a phone, in any browser), dashboard at https://garagedesk.shenit.com.au/ and customer chat at https://garagedesk.shenit.com.au/chat, calling live Nemotron models on Nebius Token Factory.
 >
 > **Demo video (2:51):** https://youtu.be/0Q1z12hNR8k
 >
@@ -92,7 +92,7 @@ Bookings made on the shop's website flow onto the board, and a job opens prefill
 | main | `nvidia/nemotron-3-super-120b-a12b` | Turning a mechanic's loose words ("pads", "5W-30", "hour and a half") into exact invoice lines; the tool-calling front desk and back office agents |
 | deep | `nvidia/Nemotron-3-Ultra-550b-a55b` | The end-of-day report: reasons over cash, jobs, parts, overdue invoices and tomorrow's board in one pass |
 
-All model calls go through Token Factory's OpenAI-compatible endpoint (`https://api.tokenfactory.nebius.com/v1/`) with native function calling. Swap any tier with `MODEL_FAST`, `MODEL_MAIN`, `MODEL_DEEP`. Token Factory has no speech models, so two small open models run on the same Nebius VM: NVIDIA Parakeet TDT 0.6B v2 (int8 ONNX, about 0.6 s per recording on 2 vCPUs, and much better than a small Whisper with accented English) transcribes the owner's recordings (`POST /api/owner/audio`), and misheard makes, models and plates are put back from the cars in the shop; faster-whisper is the fallback (`STT_ENGINE=whisper`), and Kokoro 82M (Apache-2.0) speaks the replies (`GET /api/tts`). Safari's own speech recognition and the browser's voice are fallbacks. Twilio speech recognition handles phone calls. Photos are read by a vision model on Token Factory and Nemotron does the reasoning.
+All model calls go through Token Factory's OpenAI-compatible endpoint (`https://api.tokenfactory.nebius.com/v1/`) with native function calling. Swap any tier with `MODEL_FAST`, `MODEL_MAIN`, `MODEL_DEEP`. Token Factory has no speech models, so two small open models run on the demo server's CPU: NVIDIA Parakeet TDT 0.6B v2 (int8 ONNX, about 0.2 s per recording on 4 ARM cores, 0.6 s on 2 x86 vCPUs, and much better than a small Whisper with accented English) transcribes the owner's recordings (`POST /api/owner/audio`), and misheard makes, models and plates are put back from the cars in the shop; faster-whisper is the fallback (`STT_ENGINE=whisper`), and Kokoro 82M (Apache-2.0) speaks the replies (`GET /api/tts`). Safari's own speech recognition and the browser's voice are fallbacks. Twilio speech recognition handles phone calls. Photos are read by a vision model on Token Factory and Nemotron does the reasoning.
 
 ### Safety rails that make it usable for a real business
 
@@ -154,7 +154,7 @@ scheduler ─4pm / 5:45pm─────────────────▶ 
 - **Nebius Token Factory** serves every model call through its OpenAI-compatible API with function calling. The design leans on having several Nemotron price/capability tiers behind one key: cheap Nano calls on every message, Super for the agents and invoice building, Ultra once a day, and a vision model for photos.
 - **NVIDIA Nemotron 3** (Nano, Super, Ultra) do all the language reasoning.
 - **NVIDIA Parakeet** (TDT 0.6B v2, int8 ONNX) turns the owner's recordings into text on the VM's CPU, because Token Factory has no speech model.
-- **Nebius AI Cloud** hosts the demo: one `cpu-d3` VM in eu-west1 runs the Docker image (API, built frontend, SQLite volume) behind Caddy with a Let's Encrypt certificate for the sslip.io name; see `deploy/nebius/`.
+- **Hosting:** one Docker image (API, built frontend, SQLite volume) behind Caddy with a Let's Encrypt certificate. It ran on a Nebius AI Cloud `cpu-d3` VM through development (`deploy/nebius/`); the live demo now runs on a free Oracle Cloud ARM VM (`deploy/oracle/`), and every model call still goes to Nemotron on Nebius Token Factory.
 - **Tavily** searches live supplier prices for parts the shop doesn't stock; Nemotron Nano turns the results into structured prices.
 
 Feedback on the tools is in [docs/FEEDBACK.md](docs/FEEDBACK.md). The demo video script is [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) and the Devpost text is [docs/SUBMISSION.md](docs/SUBMISSION.md).

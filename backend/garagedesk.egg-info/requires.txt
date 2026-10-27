@@ -15,7 +15,6 @@ pytest-asyncio>=0.24
 ruff>=0.6
 
 [stt]
-onnx-asr[hub]>=0.7
 faster-whisper>=1.0
 av<16,>=11
 

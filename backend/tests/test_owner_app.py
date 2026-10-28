@@ -376,3 +376,13 @@ def test_web_chat_never_finds_a_customer_by_name_alone(client):
         assert r["phone"] == "+61411000005" and "SR2020" in r["vehicle"]
         r = run_tool(s, "find_or_create_customer", {"name": "Sofia Rossi", "vehicle": "Kia Cerato"}, {"_source": "web"})
         assert r["phone"] != "+61411000005"
+
+
+def test_web_offer_must_name_the_car():
+    from app.agent.parts_lookup import _names_car
+
+    assert _names_car("2019 Mazda CX-5", "https://www.repco.com.au/parts-finder/2019-mazda-cx-5/brake-pads")
+    assert _names_car("Mazda CX-5", "Bendix front pads to suit Mazda CX5 2017-on")
+    assert not _names_car("2019 Mazda CX-5", "https://www.autoone.com.au/collections/brake-pads DB1449")
+    assert _names_car("Mazda 3", "pads for mazda3 2019")
+    assert _names_car("", "anything")

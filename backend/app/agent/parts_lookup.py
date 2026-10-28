@@ -127,6 +127,21 @@ def _web_search(q: str) -> list[dict[str, Any]]:
         return []
 
 
+def _squash(t: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", t.lower())
+
+
+def _names_car(car: str, listing: str) -> bool:
+    """The listing names the car's model ("2019-mazda-cx-5", "CX5"). No car: nothing to check."""
+    words = [w for w in car.split() if not w.isdigit()]
+    if not words:
+        return True
+    model = _squash(words[-1])
+    if len(model) < 3 and len(words) > 1:
+        model = _squash(words[-2] + words[-1])  # "Mazda 3" -> "mazda3"
+    return model in _squash(listing)
+
+
 def _extract_offers(query: str, results: list[dict[str, Any]], car: str = "") -> list[dict[str, Any]]:
     """Nemotron Nano turns raw search snippets into {supplier, price} rows."""
     snippets = "\n\n".join(f"[{r.get('title')}] ({r.get('url')})\n{r.get('content', '')[:600]}" for r in results)
@@ -150,6 +165,8 @@ def _extract_offers(query: str, results: list[dict[str, Any]], car: str = "") ->
         for o in data.get("offers", []):
             if not _parts_site(str(o.get("url", ""))):
                 continue  # only shops he can actually order from
+            if not _names_car(car, f"{o.get('url', '')} {o.get('description', '')}"):
+                continue  # a general "brake pads" page doesn't say it fits his car
             try:
                 out.append({"supplier": str(o.get("supplier", "web"))[:60], "price_cents": int(round(float(o["price_aud"]) * 100)), "source": o.get("url", "web"), "description": o.get("description", query)})
             except (KeyError, ValueError, TypeError):

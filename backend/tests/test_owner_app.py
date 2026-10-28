@@ -298,3 +298,39 @@ def test_paid_car_back_again_gets_a_new_job(client):
     assert again["kind"] == "draft" and again["job"], again
     assert again["job"]["job_id"] != first["job"]["job_id"] and again["job"]["rego"] == "ABC123"
     assert "Maria" in again["job"]["customer"]
+
+
+def test_parts_search_keeps_to_parts_shops():
+    from app.agent.parts_lookup import _parts_site
+
+    assert _parts_site("https://www.repco.com.au/en/brake-pads/p/A123")
+    assert _parts_site("https://sparesbox.com.au/front-pads")
+    assert not _parts_site("https://www.zoominfo.com/c/shandong-changxu-auto-parts/123")
+    assert not _parts_site("https://finance.yahoo.com/news/brake-pads-market")
+    assert not _parts_site("https://notrepco.com.au.example.com/x")
+
+
+def test_parts_order_says_it_checked_online(client, monkeypatch):
+    from app.agent import parts_lookup
+
+    monkeypatch.setattr(parts_lookup, "_web_search", lambda q: [{"title": "Front pads", "url": "https://www.repco.com.au/p/1", "content": "$59.99"}])
+    monkeypatch.setattr(parts_lookup, "_extract_offers", lambda q, w: [{"supplier": "Repco", "price_cents": 5999, "source": "https://www.repco.com.au/p/1", "description": "Front brake pads"}])
+    r = client.post("/api/owner/voice", json={"text": "order front pads for the Corolla"}).json()
+    assert "checked the parts shops online" in r["readback"], r["readback"]
+    assert r["readback"].endswith("Send the order?")
+
+
+def test_owner_booking_is_his_and_texts_the_customer(client):
+    from sqlmodel import Session, select
+
+    from app import db
+    from app.agent.tools import _create_booking
+    from app.models import Customer
+
+    with Session(db.get_engine()) as s:
+        c = s.exec(select(Customer).where(Customer.phone != "")).first()
+        b = _create_booking(s, c.id, "tomorrow", "09:00", "Logbook service", _source="owner")
+        s.commit()
+    assert b["source"] == "owner" and b["reference"].startswith("SNM-")
+    sms = [o for o in _outbox(client) if b["reference"] in o["body"]]
+    assert sms and sms[0]["channel"] == "sms" and sms[0]["body"].endswith("- Sunshine North Mechanic")

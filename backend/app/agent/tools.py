@@ -107,7 +107,15 @@ def _create_booking(s: Session, customer_id: int, day: str, start: str, service:
         b = svc.create_booking(s, customer=c, vehicle=v, day=svc.parse_day(day), start=svc.parse_time(start), service=service, source=_source, notes=notes)
     except ValueError:
         return {"error": "that time is full, offer another slot"}
-    return svc.booking_view(s, b)
+    view = svc.booking_view(s, b)
+    if _source == "owner" and c.phone:
+        from ..channels.transport import send
+
+        # he booked it for them on the phone: they get it in writing, like a web booking
+        first = (c.name or "").split()[0] if c.name else "there"
+        when = f"{b.day.strftime('%a %-d %b')} at {b.start.strftime('%-I:%M%p').lower()}"
+        send(s, Channel.sms, c.phone, f"Hi {first}, you're booked in for {service} on {when}. Ref {view['reference']}. Reply if you need to change it. - {get_settings().shop_trading_name}")
+    return view
 
 
 @tool("find_booking", "Find an upcoming booking by phone or rego.", {"phone": S, "rego": S})

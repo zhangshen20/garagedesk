@@ -78,10 +78,8 @@ def run_agent(
         messages.append(assistant_msg)
         s.add(Message(conversation_id=conv.id, role="assistant", content=reply.content or "", tool_calls_json=json.dumps(assistant_msg["tool_calls"]), model=model))
         for tc in reply.tool_calls:
-            args = dict(tc.arguments)
-            if tool_context and tc.name in ("create_booking",):
-                args.update(tool_context)
-            result = run_tool(s, tc.name, args)
+            ctx = tool_context if tool_context and tc.name in ("create_booking", "find_or_create_customer") else None
+            result = run_tool(s, tc.name, dict(tc.arguments), ctx)
             s.flush()
             content = json.dumps(result, default=str)
             steps.append({"tool": tc.name, "args": tc.arguments, "result": result})

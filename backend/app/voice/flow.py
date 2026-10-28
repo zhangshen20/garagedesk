@@ -65,6 +65,12 @@ def reply_to_offer(s: Session, text: str) -> dict[str, Any] | None:
         return _done(_confirm(s, o), ok=False)
     if said == "no":
         offers.clear()
+        if o and o["action"] == "order":
+            # "no" means don't send it: take it off the approvals list too
+            a = s.get(Approval, o.get("approval_id") or 0)
+            if a and a.status == ApprovalStatus.pending:
+                svc.decide_approval(s, a, False, note="owner said no", actor="owner")
+            return _done("No worries, order cancelled.")
         return _done("No worries." if o else "Okay.")
     if not o or o["action"] == "none":
         offers.clear()

@@ -314,7 +314,7 @@ def test_parts_order_says_it_checked_online(client, monkeypatch):
     from app.agent import parts_lookup
 
     monkeypatch.setattr(parts_lookup, "_web_search", lambda q: [{"title": "Front pads", "url": "https://www.repco.com.au/p/1", "content": "$59.99"}])
-    monkeypatch.setattr(parts_lookup, "_extract_offers", lambda q, w: [{"supplier": "Repco", "price_cents": 5999, "source": "https://www.repco.com.au/p/1", "description": "Front brake pads"}])
+    monkeypatch.setattr(parts_lookup, "_extract_offers", lambda q, w, car="": [{"supplier": "Repco", "price_cents": 5999, "source": "https://www.repco.com.au/p/1", "description": "Front brake pads"}])
     r = client.post("/api/owner/voice", json={"text": "order front pads for the Corolla"}).json()
     assert "checked the parts shops online" in r["readback"], r["readback"]
     assert r["readback"].endswith("Send the order?")
@@ -324,13 +324,55 @@ def test_owner_booking_is_his_and_texts_the_customer(client):
     from sqlmodel import Session, select
 
     from app import db
-    from app.agent.tools import _create_booking
+    from app.agent.tools import run_tool
     from app.models import Customer
 
     with Session(db.get_engine()) as s:
         c = s.exec(select(Customer).where(Customer.phone != "")).first()
-        b = _create_booking(s, c.id, "tomorrow", "09:00", "Logbook service", _source="owner")
+        # the model can't pick the source; the caller's context does
+        b = run_tool(s, "create_booking", {"customer_id": c.id, "day": "tomorrow", "start": "09:00", "service": "Logbook service", "_source": "web"}, {"_source": "owner"})
         s.commit()
     assert b["source"] == "owner" and b["reference"].startswith("SNM-")
     sms = [o for o in _outbox(client) if b["reference"] in o["body"]]
     assert sms and sms[0]["channel"] == "sms" and sms[0]["body"].endswith("- Sunshine North Mechanic")
+
+
+def test_owner_naming_a_regular_finds_her_not_a_new_customer(client):
+    from sqlmodel import Session, select
+
+    from app import db
+    from app import services as svc
+    from app.models import Customer
+
+    with Session(db.get_engine()) as s:
+        before = len(s.exec(select(Customer)).all())
+        for name in ("Sofia", "Sofia Rossi", "sofia rossi"):
+            c, v = svc.find_or_create_customer(s, name=name, phone="", vehicle="Kia Cerato", by_name=True)
+            assert c.name == "Sofia Rossi" and not c.phone.startswith("unknown"), name
+            assert v is not None and v.rego == "SR2020"
+        assert len(s.exec(select(Customer)).all()) == before
+        # a new customer still gets created
+        c, _ = svc.find_or_create_customer(s, name="Zed Newman", phone="", vehicle="Honda Jazz", by_name=True)
+        assert c.name == "Zed Newman" and len(s.exec(select(Customer)).all()) == before + 1
+
+
+def test_no_to_a_parts_order_cancels_it(client):
+    r = client.post("/api/owner/voice", json={"text": "order front pads for the Corolla"}).json()
+    assert r["offer"]["action"] == "order"
+    r = client.post("/api/owner/voice", json={"text": "no"}).json()
+    assert "cancelled" in r["readback"]
+    pending = [a for a in client.get("/api/approvals").json()["approvals"] if a["kind"] == "purchase_order" and a["status"] == "pending"]
+    assert pending == []
+
+
+def test_web_chat_never_finds_a_customer_by_name_alone(client):
+    from sqlmodel import Session
+
+    from app import db
+    from app.agent.tools import run_tool
+
+    with Session(db.get_engine()) as s:
+        r = run_tool(s, "find_or_create_customer", {"name": "Sofia Rossi", "vehicle": "Kia Cerato"}, {"_source": "owner"})
+        assert r["phone"] == "+61411000005" and "SR2020" in r["vehicle"]
+        r = run_tool(s, "find_or_create_customer", {"name": "Sofia Rossi", "vehicle": "Kia Cerato"}, {"_source": "web"})
+        assert r["phone"] != "+61411000005"

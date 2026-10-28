@@ -14,17 +14,18 @@ from sqlmodel import Session, select
 
 from ..config import get_settings
 from ..llm import get_llm
-from ..models import Part, Supplier
+from ..models import Part, Supplier, Vehicle
 
 log = logging.getLogger(__name__)
 
 
 def lookup_part_price(s: Session, query: str, vehicle: str = "") -> dict[str, Any]:
     local = _local_matches(s, query, vehicle)
-    web = _web_search(f"{query} {vehicle} price Australia auto parts".strip())
+    car = _with_year(s, f"{query} {vehicle}", vehicle)
+    web = _web_search(f"{query} {car} price".strip())
     offers: list[dict[str, Any]] = []
     if web:
-        offers = _extract_offers(query, web)
+        offers = _extract_offers(query, web, car)
     for p in local:
         sup = s.get(Supplier, p.supplier_id) if p.supplier_id else None
         offers.append({"supplier": sup.name if sup else "Stock", "price_cents": p.cost_cents, "source": "catalogue", "part_id": p.id, "description": p.name})
@@ -46,6 +47,17 @@ def lookup_part_price(s: Session, query: str, vehicle: str = "") -> dict[str, An
         "best_part_id": best.get("part_id") if best else None,
         "searched_web": bool(web),
     }
+
+
+def _with_year(s: Session, said: str, vehicle: str) -> str:
+    """ "Mazda CX-5" -> "2019 Mazda CX-5" when the shop knows the car: pads for a 2013 CX-5
+    don't fit a 2019 one."""
+    words = set(re.findall(r"[a-z0-9-]+", said.lower()))
+    cars = [v for v in s.exec(select(Vehicle)).all() if v.model and v.model.lower() in words]
+    if len({(v.make, v.model, v.year) for v in cars}) == 1 and cars[0].year:
+        v = cars[0]
+        return f"{v.year} {v.make} {v.model}"
+    return vehicle
 
 
 def _local_matches(s: Session, query: str, vehicle: str = "") -> list[Part]:
@@ -84,10 +96,11 @@ def _usual_supplier(s: Session, query: str) -> str:
 
 # Australian shops that sell car parts to the trade or over the counter. An open web
 # search for "front pads CX-5 price" comes back with company directories, press
-# releases and overseas factories, none of which he can order from today.
+# releases and overseas factories, none of which he can order from today. Marketplaces
+# (eBay, Amazon) are left out: their listings are for the wrong year or the wrong part.
 PARTS_SITES = [
     "repco.com.au", "supercheapauto.com.au", "autobarn.com.au", "sparesbox.com.au",
-    "burson.com.au", "autopro.com.au", "partsbox.com.au", "ebay.com.au", "amazon.com.au",
+    "burson.com.au", "autopro.com.au", "partsbox.com.au",
     "bendix.com.au", "rydeaustralia.com.au", "autoone.com.au", "brakewarehouse.com.au",
 ]
 
@@ -114,18 +127,20 @@ def _web_search(q: str) -> list[dict[str, Any]]:
         return []
 
 
-def _extract_offers(query: str, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _extract_offers(query: str, results: list[dict[str, Any]], car: str = "") -> list[dict[str, Any]]:
     """Nemotron Nano turns raw search snippets into {supplier, price} rows."""
     snippets = "\n\n".join(f"[{r.get('title')}] ({r.get('url')})\n{r.get('content', '')[:600]}" for r in results)
     prompt = (
         "You extract product prices from web search snippets. classify each result and return JSON: "
         '{"offers":[{"supplier":str,"price_aud":number,"description":str,"url":str}]} . '
         "Only include product listings from a shop selling the requested part that clearly state an AUD price. "
+        "The listing must be that exact part (front vs rear, pads not shims or hardware) and fit the car "
+        "(same model, and the year in range when the car's year is given); leave out anything that doesn't. "
         "supplier is the shop's name (e.g. Repco, Supercheap Auto, Sparesbox). Max 5 offers."
     )
     try:
         reply = get_llm().chat(
-            [{"role": "system", "content": prompt}, {"role": "user", "content": f"Part: {query}\n\n{snippets}"}],
+            [{"role": "system", "content": prompt}, {"role": "user", "content": f"Part: {query}\nCar: {car or 'not given'}\n\n{snippets}"}],
             tier="fast",
             json_mode=True,
             max_tokens=600,

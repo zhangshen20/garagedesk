@@ -181,8 +181,11 @@ def find_customer(s: Session, *, phone: str = "", rego: str = "", name: str = ""
     return None
 
 
-def find_or_create_customer(s: Session, *, name: str, phone: str, rego: str = "", vehicle: str = "") -> tuple[Customer, Vehicle | None]:
+def find_or_create_customer(s: Session, *, name: str, phone: str, rego: str = "", vehicle: str = "", by_name: bool = False) -> tuple[Customer, Vehicle | None]:
     c = find_customer(s, phone=phone, rego=rego)
+    if not c and by_name and name and not phone:
+        # "book Sofia's Cerato in": the owner names a regular, he doesn't read out her number
+        c = _regular_by_name(s, name, vehicle)
     if not c:
         c = Customer(name=name or "Unknown caller", phone=normalise_phone(phone) or f"unknown-{datetime.utcnow().timestamp():.0f}")
         s.add(c)
@@ -192,12 +195,35 @@ def find_or_create_customer(s: Session, *, name: str, phone: str, rego: str = ""
     v: Vehicle | None = None
     if rego:
         v = s.exec(select(Vehicle).where(Vehicle.rego == rego.upper().replace(" ", ""))).first()
+    if not v and vehicle and not rego and c.id:
+        v = _their_car(s, c.id, vehicle)  # her Cerato, not a new "Kia Cerato UNKNOWN"
     if not v and (rego or vehicle):
         make, _, model = (vehicle or "Unknown Unknown").partition(" ")
         v = Vehicle(customer_id=c.id, rego=rego.upper().replace(" ", "") or "UNKNOWN", make=make, model=model or "")
         s.add(v)
         s.flush()
     return c, v
+
+
+def _their_car(s: Session, customer_id: int, vehicle: str) -> Vehicle | None:
+    words = {w for w in re.findall(r"[a-z0-9-]+", vehicle.lower()) if len(w) > 1}
+    cars = [v for v in s.exec(select(Vehicle).where(Vehicle.customer_id == customer_id)).all() if words & {v.make.lower(), *v.model.lower().split()}]
+    return cars[0] if len(cars) == 1 else None
+
+
+def _regular_by_name(s: Session, name: str, vehicle: str = "") -> Customer | None:
+    """The one customer with that name (full name, or first name plus the car). Two
+    customers it could be: none, so nobody gets someone else's booking."""
+    name = " ".join(name.split())
+    same = s.exec(select(Customer).where(Customer.name.ilike(name))).all()  # type: ignore[attr-defined]
+    if len(same) == 1:
+        return same[0]
+    if same or " " in name:
+        return None
+    first = s.exec(select(Customer).where(Customer.name.ilike(f"{name} %"))).all()  # type: ignore[attr-defined]
+    if vehicle:
+        first = [c for c in first if c.id and _their_car(s, c.id, vehicle)]
+    return first[0] if len(first) == 1 else None
 
 
 # --- bookings -------------------------------------------------------------------------

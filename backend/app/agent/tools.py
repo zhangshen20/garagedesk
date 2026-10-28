@@ -52,11 +52,13 @@ def schemas_for(names: list[str]) -> list[dict[str, Any]]:
     return [REGISTRY[n][0] for n in names]
 
 
-def run_tool(s: Session, name: str, args: dict[str, Any]) -> dict[str, Any]:
+def run_tool(s: Session, name: str, args: dict[str, Any], context: dict[str, Any] | None = None) -> dict[str, Any]:
+    """context: "_"-prefixed values set by the caller (where a booking came from). The
+    model can't set those itself: its own "_" arguments are dropped."""
     if name not in REGISTRY:
         return {"error": f"unknown tool {name}"}
     try:
-        return REGISTRY[name][1](s, **{k: v for k, v in args.items() if not k.startswith("_")})
+        return REGISTRY[name][1](s, **{k: v for k, v in args.items() if not k.startswith("_")}, **(context or {}))
     except TypeError as e:
         return {"error": f"bad arguments: {e}"}
     except ValueError as e:
@@ -76,8 +78,10 @@ I = {"type": "integer"}
     {"name": S, "phone": S, "rego": {**S, "description": "registration plate, if given"}, "vehicle": {**S, "description": "make and model, e.g. 'Toyota Corolla'"}},
     ["name"],
 )
-def _find_or_create_customer(s: Session, name: str = "", phone: str = "", rego: str = "", vehicle: str = "") -> dict[str, Any]:
-    c, v = svc.find_or_create_customer(s, name=name, phone=phone, rego=rego, vehicle=vehicle)
+def _find_or_create_customer(s: Session, name: str = "", phone: str = "", rego: str = "", vehicle: str = "", _source: str = "web") -> dict[str, Any]:
+    # only the owner finds a customer by name alone: a stranger on the web chat typing
+    # "Sofia Rossi" must not get her record
+    c, v = svc.find_or_create_customer(s, name=name, phone=phone, rego=rego, vehicle=vehicle, by_name=_source == "owner")
     return {"customer_id": c.id, "name": c.name, "phone": c.phone, "vehicle_id": v.id if v else None, "vehicle": f"{v.make} {v.model} {v.rego}" if v else None, "existing": not c.name.startswith("Unknown")}
 
 
@@ -108,7 +112,7 @@ def _create_booking(s: Session, customer_id: int, day: str, start: str, service:
     except ValueError:
         return {"error": "that time is full, offer another slot"}
     view = svc.booking_view(s, b)
-    if _source == "owner" and c.phone:
+    if _source == "owner" and c.phone and not c.phone.startswith("unknown"):
         from ..channels.transport import send
 
         # he booked it for them on the phone: they get it in writing, like a web booking

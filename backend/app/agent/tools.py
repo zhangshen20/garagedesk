@@ -118,7 +118,7 @@ def _create_booking(s: Session, customer_id: int, day: str, start: str, service:
         # he booked it for them on the phone: they get it in writing, like a web booking
         first = (c.name or "").split()[0] if c.name else "there"
         when = f"{b.day.strftime('%a %-d %b')} at {b.start.strftime('%-I:%M%p').lower()}"
-        send(s, Channel.sms, c.phone, f"Hi {first}, you're booked in for {service} on {when}. Ref {view['reference']}. Reply if you need to change it. - {get_settings().shop_trading_name}")
+        send(s, Channel.sms, c.phone, f"Hi {first}, you're booked in for {service[:1].lower() + service[1:] if service[1:2].islower() else service} on {when}. Ref {view['reference']}. Reply if you need to change it. - {get_settings().shop_trading_name}")
     return view
 
 

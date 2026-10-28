@@ -82,6 +82,21 @@ def _usual_supplier(s: Session, query: str) -> str:
     return sup.name if sup else "the parts supplier"
 
 
+# Australian shops that sell car parts to the trade or over the counter. An open web
+# search for "front pads CX-5 price" comes back with company directories, press
+# releases and overseas factories, none of which he can order from today.
+PARTS_SITES = [
+    "repco.com.au", "supercheapauto.com.au", "autobarn.com.au", "sparesbox.com.au",
+    "burson.com.au", "autopro.com.au", "partsbox.com.au", "ebay.com.au", "amazon.com.au",
+    "bendix.com.au", "rydeaustralia.com.au", "autoone.com.au", "brakewarehouse.com.au",
+]
+
+
+def _parts_site(url: str) -> bool:
+    host = re.sub(r"^https?://", "", url or "").split("/", 1)[0].lower()
+    return any(host == d or host.endswith("." + d) for d in PARTS_SITES)
+
+
 def _web_search(q: str) -> list[dict[str, Any]]:
     key = get_settings().tavily_api_key
     if not key:
@@ -89,11 +104,11 @@ def _web_search(q: str) -> list[dict[str, Any]]:
     try:
         r = httpx.post(
             "https://api.tavily.com/search",
-            json={"api_key": key, "query": q, "max_results": 5, "include_answer": False, "search_depth": "basic"},
+            json={"api_key": key, "query": q, "max_results": 8, "include_answer": False, "search_depth": "basic", "include_domains": PARTS_SITES},
             timeout=20,
         )
         r.raise_for_status()
-        return r.json().get("results", [])
+        return [x for x in r.json().get("results", []) if _parts_site(x.get("url", ""))]
     except Exception as e:  # noqa: BLE001
         log.warning("Tavily search failed: %s", e)
         return []
@@ -105,7 +120,8 @@ def _extract_offers(query: str, results: list[dict[str, Any]]) -> list[dict[str,
     prompt = (
         "You extract product prices from web search snippets. classify each result and return JSON: "
         '{"offers":[{"supplier":str,"price_aud":number,"description":str,"url":str}]} . '
-        "Only include results that clearly state an AUD price for the requested part. Max 5 offers."
+        "Only include product listings from a shop selling the requested part that clearly state an AUD price. "
+        "supplier is the shop's name (e.g. Repco, Supercheap Auto, Sparesbox). Max 5 offers."
     )
     try:
         reply = get_llm().chat(
@@ -117,6 +133,8 @@ def _extract_offers(query: str, results: list[dict[str, Any]]) -> list[dict[str,
         data = json.loads(reply.content or "{}")
         out = []
         for o in data.get("offers", []):
+            if not _parts_site(str(o.get("url", ""))):
+                continue  # only shops he can actually order from
             try:
                 out.append({"supplier": str(o.get("supplier", "web"))[:60], "price_cents": int(round(float(o["price_aud"]) * 100)), "source": o.get("url", "web"), "description": o.get("description", query)})
             except (KeyError, ValueError, TypeError):

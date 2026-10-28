@@ -518,7 +518,17 @@ def _order_offer(s: Session, text: str, placed: dict[str, Any], model: str, step
     items = " and ".join(f"{l['qty']:g} x {short(l['description'])}" if l["qty"] != 1 else short(l["description"]) for l in view["lines"]) or "the parts"
     items = items[:1].upper() + items[1:]
     price = f"${view['total_cents'] / 100:,.2f} plus GST" if view["total_cents"] else "they'll price it on their invoice"
-    say = f"{items} from {view['supplier']}, {price}. Send the order?"
+    looked = [st["result"] for st in steps if st["tool"] == "lookup_part_price" and isinstance(st.get("result"), dict)]
+    online = [o for r in looked for o in r.get("offers", []) if o.get("source") != "catalogue"]
+    # he should hear where the price came from: the parts shops online, or what the shop already pays
+    if online:
+        cheapest = online[0]["supplier"]
+        checked = "I checked the parts shops online. " + ("" if cheapest.lower() in view["supplier"].lower() else f"Cheapest online is {cheapest}. ")
+    elif any(r.get("searched_web") for r in looked):
+        checked = "I checked online but found no better price. "
+    else:
+        checked = ""
+    say = f"{checked}{items} from {view['supplier']}, {price}. Send the order?"
     out = _reply(text, say, model, steps=steps)
     out["offer"] = offers.put("order", say, approval_id=placed["approval_id"])
     return out

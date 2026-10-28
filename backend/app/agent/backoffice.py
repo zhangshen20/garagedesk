@@ -66,4 +66,5 @@ def handle_owner_message(s: Session, text: str, owner_app: bool = False, context
         tool_names=(OWNER_APP_TOOLS if owner_app else BACKOFFICE_TOOLS) + MEMORY_TOOLS,
         tier="main",
         stop_after={"prepare_invoice", "order_parts"} if owner_app else None,
+        tool_context={"_source": "owner"},  # a booking he makes is his, not a web booking
     )
